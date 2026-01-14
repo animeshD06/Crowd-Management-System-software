@@ -78,8 +78,8 @@ CMS is an advanced crowd management platform designed to enhance safety, efficie
 
 1.  **Clone the repository:**
     ```
-    git clone https://github.com/vik05h/crowd-management-system.git
-    cd crowd-management-system
+    git clone https://github.com/animeshD06/Crowd-Management-System-software/
+    cd crowd-management-systemosoftware
     ```
 
 2.  **Choose your installation method:**
