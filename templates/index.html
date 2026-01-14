@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crowd Management System</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- GSAP CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <!-- Three.js and Vanta.js for animated backgrounds -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"></script>
+
+  <style>
+    body {
+       background: linear-gradient(135deg, #0f1419 0%, #1a1a2e 100%);
+       min-height: 100vh;
+       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+       color: #ffffff;
+     }
+    .navbar-brand {
+        font-weight: 600;
+    }
+    .hero-section {
+      min-height: 85vh;
+      display: flex;
+      align-items: center;
+      padding-top: 80px;
+      padding-bottom: 40px;
+      background: linear-gradient(135deg, #0f1419 0%, #1a1a2e 100%);
+      position: relative;
+      overflow: hidden;
+    }
+     .hero-section::before {
+       content: '';
+       position: absolute;
+       top: 0;
+       left: 0;
+       right: 0;
+       bottom: 0;
+       background: rgba(0, 0, 0, 0.5);
+       z-index: 1;
+     }
+     .hero-text-content {
+       position: relative;
+       z-index: 2;
+     }
+     .hero-text-content h1 {
+         font-weight: 700;
+         line-height: 1.2;
+         color: #ffffff;
+         text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+     }
+     .hero-text-content p {
+         font-size: 1.1rem;
+         color: #e0e0e0;
+         max-width: 500px;
+         text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+     }
+    .svg-hero-container {
+       background: rgba(255, 255, 255, 0.1);
+       backdrop-filter: blur(10px);
+       border-radius: 24px;
+       padding: 2rem;
+       box-shadow: 0 12px 40px rgba(0, 123, 255, 0.2);
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+     }
+    .action-btn {
+      padding: 0.8rem 1.75rem;
+      font-size: 1.05rem;
+      font-weight: 500;
+      border-radius: 1rem;
+      transition: all 0.3s ease;
+      margin: 0.5rem;
+      border: none;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .action-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
+    }
+    .action-btn:hover::before {
+      left: 100%;
+    }
+    .action-btn:hover {
+      transform: translateY(-4px) scale(1.05);
+      box-shadow: 0 15px 30px rgba(0, 123, 255, 0.4);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0056b3, #004085);
+      color: white;
+    }
+    .btn-camera {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+    }
+    .btn-camera:hover {
+      background: linear-gradient(135deg, #218838, #1ea37a);
+      color: white;
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+    }
+    .btn-success:hover {
+      background: linear-gradient(135deg, #218838, #1ea37a);
+      color: white;
+    }
+    .btn-outline-primary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .btn-outline-primary:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+    .feature-card {
+       background: rgba(255, 255, 255, 0.1);
+       backdrop-filter: blur(10px);
+       border-radius: 1rem;
+       padding: 1.5rem;
+       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+       transition: transform 0.3s ease, box-shadow 0.3s ease;
+       height: 100%;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+       color: #ffffff;
+     }
+    .feature-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 8px 30px rgba(0, 123, 255, 0.15);
+    }
+    .feature-icon {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .stats-section {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+      padding: 4rem 0;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 2.5rem;
+      font-weight: 700;
+      display: block;
+    }
+    .upload-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+    }
+    .upload-card h2 {
+        font-weight: 600;
+        color: #ffffff;
+    }
+    #videoPreview {
+      border: 2px dashed rgba(204, 224, 255, 0.5);
+      background-color: rgba(248, 250, 255, 0.1);
+      backdrop-filter: blur(5px);
+      max-height: 320px;
+      border-radius: 0.5rem;
+    }
+    .upload-area.dragover {
+      border-color: #007bff;
+      background-color: rgba(0, 123, 255, 0.1);
+    }
+    .status-message {
+        font-weight: 500;
+        min-height: 1.5em;
+    }
+    .footer {
+        background-color: #0056b3;
+        color: #ffffff;
+    }
+    .tech-badge {
+      background: rgba(0, 123, 255, 0.1);
+      color: #007bff;
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      font-weight: 500;
+      margin: 0.25rem;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark shadow-sm fixed-top" style="background: rgba(0, 123, 255, 0.8); backdrop-filter: blur(10px);">
+    <div class="container">
+      <a class="navbar-brand fs-4" href="#">Crowd Management System</a>
+      <div class="navbar-nav ms-auto">
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#uploadVideoSection">Upload Video</a>
+        <a class="nav-link" href="#uploadImageSection">Upload Image</a>
+        <a class="nav-link" href="#batchProcessingSection">Batch Processing</a>
+        <a class="nav-link" href="#about">About</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="heroSection" class="hero-section">
+    <div class="container">
+      <div class="row align-items-center gy-5 justify-content-center">
+        <!-- Hero Text -->
+        <div class="col-lg-8 col-md-10 col-12 text-center">
+          <div id="heroTextContent" class="hero-text-content text-center">
+            <h1 class="display-3 mb-4 fw-bold">Smart Crowd Management</h1>
+            <p class="lead mb-5 fs-5" style="max-width: 700px; margin: 0 auto; line-height: 1.6;">
+              Advanced AI-powered crowd analysis using YOLO11x for real-time monitoring, heatmap generation, and safety management in public spaces and events.
+            </p>
+            <div class="mb-5">
+              <span class="tech-badge">YOLO11x</span>
+              <span class="tech-badge">Real-time Analysis</span>
+              <span class="tech-badge">Heatmap Generation</span>
+              <span class="tech-badge">Safety Alerts</span>
+            </div>
+            <!-- Updated Button Section -->
+            <div class="d-flex flex-wrap justify-content-center gap-3">
+              <button class="btn btn-camera action-btn px-4 py-3" id="liveCameraBtn">
+                <i class="bi bi-camera-video me-2"></i>Start Live Camera
+              </button>
+              <a href="#uploadVideoSection" class="btn btn-primary action-btn px-4 py-3" id="getStartedBtn">
+                <i class="bi bi-upload me-2"></i>Upload Video
+              </a>
+              <a href="#features" class="btn btn-outline-light action-btn px-4 py-3">Learn More</a>
+            </div>
+          </div>
+        </div>
+        <!-- Hero SVG Removed -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Section -->
+  <section class="stats-section py-5" style="background: rgba(0, 123, 255, 0.1); backdrop-filter: blur(5px);">
+    <div class="container">
+      <div class="row text-center">
+        <div class="col-md-3 col-6 mb-4">
+          <div class="stat-item" style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.2);">
+            <span class="stat-number" data-count="92.7">0</span>
+            <span>Accuracy Rate</span>
+          </div>
+        </div>
+        <div class="col-md-3 col-6 mb-4">
+          <div class="stat-item" style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.2);">
+            <span class="stat-number" data-count="2100">0</span>
+            <span>Model Trained on Images+</span>
+          </div>
+        </div>
+        <div class="col-md-3 col-6 mb-4">
+          <div class="stat-item" style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.2);">
+            <span class="stat-number" data-count="42">0</span>
+            <span>Events Monitored</span>
+          </div>
+        </div>
+        <div class="col-md-3 col-6 mb-4">
+          <div class="stat-item" style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.2);">
+            <span class="stat-number" data-count="24">0</span>
+            <span>Hours Real-time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="container py-5 my-5">
+    <div class="text-center mb-5">
+      <h2 class="display-5 fw-bold text-primary mb-3">Powerful Features</h2>
+      <p class="lead text-muted">Comprehensive crowd analysis tools for enhanced safety and management</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-camera-video"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Real-time Monitoring</h4>
+          <p class="text-muted">Live video analysis with instant crowd density detection and movement tracking using advanced YOLO11x algorithms.</p>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-thermometer-half"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Heatmap Generation</h4>
+          <p class="text-muted">Visual density maps showing crowd concentration patterns and high-traffic areas for better space management.</p>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-shield-check"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Safety Alerts</h4>
+          <p class="text-muted">Automated alerts for overcrowding, unusual behavior patterns, and potential safety risks in real-time.</p>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-graph-up"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Analytics Dashboard</h4>
+          <p class="text-muted">Comprehensive analytics with detailed reports, trends, and insights for data-driven decision making.</p>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-people"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Crowd Tracking</h4>
+          <p class="text-muted">Individual and group movement tracking with path analysis and behavioral pattern recognition.</p>
+        </div>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <i class="bi bi-lightning"></i>
+          </div>
+          <h4 class="fw-bold mb-3">Fast Processing</h4>
+          <p class="text-muted">High-speed video processing with minimal latency for immediate results and rapid response capabilities.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Upload Section -->
+  <section id="uploadVideoSection" class="container py-5 my-4">
+    <div class="upload-card mx-auto" style="max-width: 600px;">
+      <h2 class="mb-4 text-center">Upload Video for Crowd Analysis</h2>
+      <div class="mb-3">
+        <label for="videoInput" class="form-label fs-5">Select or Drag & Drop Video File</label>
+        <div id="videoDropArea" class="upload-area p-4 text-center border rounded" style="cursor: pointer;">
+          <input type="file" accept="video/*" class="d-none" id="videoInput"/>
+          <div class="upload-placeholder">
+            <i class="bi bi-cloud-upload fs-1 text-primary mb-3"></i>
+            <p class="mb-2">Drag & drop your video here or <span class="text-primary fw-bold" onclick="document.getElementById('videoInput').click()">browse</span></p>
+            <small class="text-muted">Supported formats: MP4, MOV, AVI (Max size: 100MB)</small>
+          </div>
+        </div>
+      </div>
+      <video id="videoPreview" controls class="w-100 rounded mb-3" style="display: none;"></video>
+      <button class="btn btn-primary w-100 py-3 fs-5 action-btn" id="uploadBtn">
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="display: none;"></span>
+        <i class="bi bi-cloud-upload me-2"></i>Upload & Analyze
+      </button>
+      <div class="mt-3 text-center status-message" id="uploadStatus"></div>
+    </div>
+  </section>
+
+  <!-- Image Upload Section -->
+  <section id="uploadImageSection" class="container py-5 my-4">
+    <div class="upload-card mx-auto" style="max-width: 800px;">
+      <h2 class="mb-4 text-center">Advanced Crowd Analysis with Area Selection</h2>
+      <div class="mb-3">
+        <label for="imageInput" class="form-label fs-5">Select or Drag & Drop Image File</label>
+        <div id="imageDropArea" class="upload-area p-4 text-center border rounded" style="cursor: pointer;">
+          <input type="file" accept="image/*" class="d-none" id="imageInput"/>
+          <div class="upload-placeholder">
+            <i class="bi bi-cloud-upload fs-1 text-success mb-3"></i>
+            <p class="mb-2">Drag & drop your image here or <span class="text-success fw-bold" onclick="document.getElementById('imageInput').click()">browse</span></p>
+            <small class="text-muted">Supported formats: JPG, PNG, BMP, TIFF (Max size: 50MB)</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Area Selection Interface -->
+      <div id="areaSelectionContainer" class="mb-4" style="display: none;">
+        <h5 class="mb-3">Step 2: Select Analysis Area</h5>
+        <div class="row">
+          <div class="col-md-8">
+            <div class="canvas-container position-relative border rounded" style="background: #f8f9fa;">
+              <canvas id="imageCanvas" class="w-100 rounded" style="max-height: 400px; object-fit: contain;"></canvas>
+              <div class="canvas-overlay position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none;">
+                <div id="selectionInfo" class="position-absolute top-0 end-0 bg-dark text-white p-2 rounded m-2" style="font-size: 0.8rem; display: none;">
+                  <div>Selected Area: <span id="selectedAreaDisplay">0.00</span> sq m</div>
+                  <div>Estimated Capacity: <span id="estimatedCapacityDisplay">0</span> people</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="scaling-controls">
+              <h6>Reference Scaling</h6>
+              <div class="mb-3">
+                <label class="form-label">Reference Object Length (meters)</label>
+                <input type="number" class="form-control" id="referenceLength" step="0.1" min="0.1" value="2.0" placeholder="e.g., 2.0">
+              </div>
+              <div class="mb-3">
+                <button class="btn btn-outline-primary btn-sm w-100" id="setReferenceBtn">
+                  <i class="bi bi-rulers me-1"></i>Set Reference Line
+                </button>
+                <small class="text-muted d-block mt-1">Draw a line on known length object</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Personal Space (sq m/person)</label>
+                <input type="number" class="form-control" id="personalSpace" step="0.1" min="1.0" max="3.0" value="1.8">
+              </div>
+              <div class="drawing-tools">
+                <h6>Drawing Tools</h6>
+                <div class="btn-group-vertical w-100" role="group">
+                  <button class="btn btn-outline-secondary btn-sm active" id="rectTool">
+                    <i class="bi bi-square me-1"></i>Rectangle
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" id="polygonTool">
+                    <i class="bi bi-pentagon me-1"></i>Polygon
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" id="freehandTool">
+                    <i class="bi bi-pencil me-1"></i>Freehand
+                  </button>
+                </div>
+                <div class="mt-2">
+                  <button class="btn btn-outline-danger btn-sm w-100" id="clearSelectionBtn">
+                    <i class="bi bi-trash me-1"></i>Clear Selection
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <img id="imagePreview" class="w-100 rounded mb-3" style="display: none; max-height: 320px; object-fit: contain; border: 2px solid #cce0ff; background-color: #f8faff;"></img>
+      <button class="btn btn-success w-100 py-3 fs-5 action-btn" id="uploadImageBtn">
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="display: none;"></span>
+        <i class="bi bi-cloud-upload me-2"></i>Upload & Analyze
+      </button>
+      <div class="mt-3 text-center status-message" id="uploadImageStatus"></div>
+
+      <!-- Enhanced Results Dashboard -->
+      <div id="analysisResults" class="mt-4" style="display: none;">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analysis Results</h5>
+              </div>
+              <div class="card-body">
+                <div class="row text-center">
+                  <div class="col-6">
+                    <div class="p-2 bg-primary text-white rounded">
+                      <div class="h4 mb-0" id="peopleCount">0</div>
+                      <small>People Detected</small>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <div class="p-2 bg-success text-white rounded">
+                      <div class="h4 mb-0" id="selectedArea">0.00</div>
+                      <small>Area (sq m)</small>
+                    </div>
+                  </div>
+                </div>
+                <hr>
+                <div class="row text-center">
+                  <div class="col-6">
+                    <div class="p-2 bg-info text-white rounded">
+                      <div class="h5 mb-0" id="estimatedCapacity">0</div>
+                      <small>Max Capacity</small>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <div class="p-2 bg-warning text-white rounded">
+                      <div class="h5 mb-0" id="currentDensity">0.00</div>
+                      <small>Density (p/sq m)</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Safety Status</h5>
+              </div>
+              <div class="card-body">
+                <div class="text-center mb-3">
+                  <span class="badge fs-5 px-3 py-2" id="safetyBadge">Safe</span>
+                </div>
+                <div class="progress mb-2" style="height: 20px;">
+                  <div class="progress-bar" id="densityProgress" role="progressbar" style="width: 0%"></div>
+                </div>
+                <small class="text-muted">Current Density vs Max Capacity</small>
+                <hr>
+                <div class="alert" id="safetyAlert" style="display: none;">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <span id="safetyMessage"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="d-flex gap-2 justify-content-center">
+              <a id="processedImageLink" href="#" target="_blank" class="btn btn-outline-primary action-btn">
+                <i class="bi bi-eye me-1"></i>View Processed Image
+              </a>
+              <button class="btn btn-outline-secondary action-btn" id="exportResultsBtn">
+                <i class="bi bi-download me-1"></i>Export Report
+              </button>
+              <button class="btn btn-outline-info action-btn" id="saveAnalysisBtn">
+                <i class="bi bi-save me-1"></i>Save Analysis
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- JSON Output (hidden but accessible) -->
+        <div id="jsonOutput" style="display: none;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Batch Processing Section -->
+  <section id="batchProcessingSection" class="container py-5 my-4">
+    <div class="upload-card mx-auto" style="max-width: 800px;">
+      <h2 class="mb-4 text-center">Batch Processing</h2>
+      <p class="text-center text-muted mb-4">Process multiple images or videos simultaneously for comprehensive crowd analysis</p>
+
+      <div class="mb-3">
+        <label class="form-label fs-5">Select Multiple Files</label>
+        <div id="batchDropArea" class="upload-area p-4 text-center border rounded" style="cursor: pointer;">
+          <input type="file" accept="image/*,video/*" class="d-none" id="batchInput" multiple/>
+          <div class="upload-placeholder">
+            <i class="bi bi-files fs-1 text-info mb-3"></i>
+            <p class="mb-2">Drag & drop multiple files here or <span class="text-info fw-bold" onclick="document.getElementById('batchInput').click()">browse</span></p>
+            <small class="text-muted">Supported: JPG, PNG, MP4, MOV, AVI (Max 10 files, 50MB each)</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- File List -->
+      <div id="batchFileList" class="mb-3" style="display: none;">
+        <h6>Selected Files:</h6>
+        <div id="fileListContainer" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+          <!-- Files will be listed here -->
+        </div>
+      </div>
+
+      <!-- Batch Settings -->
+      <div id="batchSettings" class="mb-3" style="display: none;">
+        <h6>Processing Settings:</h6>
+        <div class="row">
+          <div class="col-md-6">
+            <label class="form-label">Personal Space (sq m/person)</label>
+            <input type="number" class="form-control" id="batchPersonalSpace" step="0.1" min="1.0" max="3.0" value="1.8">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Reference Scale (pixels/meter)</label>
+            <input type="number" class="form-control" id="batchScaleFactor" step="0.1" min="0.1" value="1.0">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-info w-100 py-3 fs-5 action-btn" id="batchProcessBtn" style="display: none;">
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="display: none;"></span>
+        <i class="bi bi-play-circle me-2"></i>Process All Files
+      </button>
+
+      <div class="mt-3 text-center status-message" id="batchStatus"></div>
+
+      <!-- Batch Results -->
+      <div id="batchResults" class="mt-4" style="display: none;">
+        <h5 class="mb-3">Batch Processing Results</h5>
+        <div class="table-responsive">
+          <table class="table table-dark table-striped">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>People Detected</th>
+                <th>Area (sq m)</th>
+                <th>Max Capacity</th>
+                <th>Safety Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="batchResultsTable">
+              <!-- Results will be populated here -->
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-3 d-flex gap-2 justify-content-center">
+          <button class="btn btn-outline-primary action-btn" id="exportBatchCSV">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
+          </button>
+          <button class="btn btn-outline-success action-btn" id="exportBatchPDF">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF Report
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section id="about" class="py-5" style="background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(5px);">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-6">
+          <h2 class="display-6 fw-bold text-primary mb-4">About Our Technology</h2>
+          <p class="lead mb-4">Our crowd management system leverages cutting-edge AI technology to provide comprehensive crowd analysis and safety monitoring solutions.</p>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <h5 class="fw-bold">AI-Powered</h5>
+              <p class="text-muted small">Advanced machine learning algorithms</p>
+            </div>
+            <div class="col-6 mb-3">
+              <h5 class="fw-bold">Real-time</h5>
+              <p class="text-muted small">Instant analysis and alerts</p>
+            </div>
+            <div class="col-6 mb-3">
+              <h5 class="fw-bold">Scalable</h5>
+              <p class="text-muted small">Works for any event size</p>
+            </div>
+            <div class="col-6 mb-3">
+              <h5 class="fw-bold">Accurate</h5>
+              <p class="text-muted small">99.5% detection accuracy</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="bg-white p-4 rounded-3 shadow">
+            <h5 class="fw-bold mb-3">Use Cases</h5>
+            <ul class="list-unstyled">
+              <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Concert & Festival Management</li>
+              <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Shopping Mall Monitoring</li>
+              <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Airport & Station Security</li>
+              <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Sports Event Safety</li>
+              <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Emergency Evacuation Planning</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center py-4" style="background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px); color: #ffffff;">
+    <div class="container">
+      <p class="mb-0">&copy; 2025 Crowd Management System. AI-Powered Safety Solutions.</p>
+    </div>
+  </footer>
+
+  <script>
+    gsap.registerPlugin(ScrollTrigger);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Hero Text Animation
+      gsap.from("#heroTextContent > *", {
+        opacity: 0,
+        y: 30,
+        duration: 0.7,
+        stagger: 0.2,
+        ease: "power2.out"
+      });
+
+      // Hero SVG Animation - commented out as SVG is removed
+      // gsap.from("#heroSvgContainer", {
+      //   opacity: 0,
+      //   scale: 0.85,
+      //   duration: 1,
+      //   delay: 0.4,
+      //   ease: "elastic.out(1, 0.75)"
+      // });
+
+      // Stats Counter Animation
+      gsap.utils.toArray('.stat-number').forEach(stat => {
+        const target = stat.getAttribute('data-count');
+        gsap.to(stat, {
+          innerText: target,
+          duration: 2,
+          ease: "power2.out",
+          snap: { innerText: 1 },
+          scrollTrigger: {
+            trigger: stat,
+            start: "top 80%",
+            toggleActions: "play none none none"
+          },
+          onUpdate: function () {
+            if (target.includes('.')) {
+              stat.innerText = Number(stat.innerText).toFixed(1);
+            }
+          }
+        });
+      });
+
+      // Feature Cards Animation
+      gsap.from(".feature-card", {
+        opacity: 0,
+        y: 50,
+        duration: 0.6,
+        stagger: 0.1,
+        scrollTrigger: {
+          trigger: "#features",
+          start: "top 70%",
+          toggleActions: "play none none none"
+        }
+      });
+
+      // Upload Section Animation
+      gsap.from("#uploadVideoSection .upload-card", {
+        opacity: 0,
+        y: 50,
+        duration: 0.8,
+        scrollTrigger: {
+          trigger: "#uploadVideoSection",
+          start: "top 80%",
+          toggleActions: "play none none none"
+        }
+      });
+    });
+
+    // Live Camera Button Handler
+    document.getElementById('liveCameraBtn').addEventListener('click', function() {
+      gsap.to(this, { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
+      
+      // Show loading state
+      this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting Camera...';
+      this.disabled = true;
+      
+      // Redirect to live camera page
+      setTimeout(() => {
+        window.location.href = '/live_camera';
+      }, 1000);
+    });
+
+    const videoInput = document.getElementById('videoInput');
+    const videoDropArea = document.getElementById('videoDropArea');
+    const videoPreview = document.getElementById('videoPreview');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const spinner = uploadBtn.querySelector('.spinner-border');
+
+    // Drag and Drop for Video
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      videoDropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      videoDropArea.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      videoDropArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+      videoDropArea.classList.add('dragover');
+    }
+
+    function unhighlight(e) {
+      videoDropArea.classList.remove('dragover');
+    }
+
+    videoDropArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        videoInput.files = files;
+        videoInput.dispatchEvent(new Event('change'));
+      }
+    }
+
+    videoDropArea.addEventListener('click', () => {
+      videoInput.click();
+    });
+
+    videoInput.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file && file.type.startsWith('video/')) {
+        const url = URL.createObjectURL(file);
+        videoPreview.src = url;
+        videoPreview.style.display = 'block';
+        uploadStatus.textContent = 'Video selected. Ready to analyze.';
+        uploadStatus.className = 'mt-3 text-center status-message text-muted';
+        gsap.fromTo(videoPreview, {opacity:0, height: 0}, {opacity:1, height: 'auto', duration: 0.4, ease: 'power1.out'});
+      } else {
+        videoPreview.src = '';
+        videoPreview.style.display = 'none';
+        if (file) {
+          uploadStatus.textContent = 'Invalid file. Please select a video (MP4, MOV, AVI).';
+          uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        } else {
+          uploadStatus.textContent = '';
+          uploadStatus.className = 'mt-3 text-center status-message';
+        }
+      }
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+      const file = videoInput.files[0];
+      if (!file) {
+        uploadStatus.textContent = 'Please select a video file first!';
+        uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        gsap.fromTo(uploadStatus, {x: -8}, {x: 8, duration: 0.07, yoyo: true, repeat: 5, ease: 'power1.inOut', clearProps:"x"});
+        return;
+      }
+      if (!file.type.startsWith('video/')) {
+        uploadStatus.textContent = 'Invalid file type. Please select a video.';
+        uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('video', file);
+
+      uploadStatus.textContent = 'Processing video... Analyzing crowd patterns.';
+      uploadStatus.className = 'mt-3 text-center status-message text-info';
+      spinner.style.display = 'inline-block';
+      uploadBtn.disabled = true;
+      gsap.to(uploadBtn, { y: -2, boxShadow: "0 4px 10px rgba(0,123,255,0.2)", duration: 0.1});
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          uploadStatus.textContent = `Analysis Complete! ${result.message || 'Crowd analysis results are ready.'}`;
+          uploadStatus.className = 'mt-3 text-center status-message text-success fw-bold';
+          gsap.fromTo(uploadStatus, {scale: 0.9, opacity:0}, {scale: 1, opacity:1, duration: 0.4, ease: 'back.out(1.7)'});
+          setTimeout(() => {
+            window.location.href = '/live_preview';
+          }, 2000);
+        } else {
+          const errorResult = await response.json().catch(() => ({ detail: "Server error. Please try again." }));
+          uploadStatus.textContent = `Error ${response.status}: ${errorResult.detail || response.statusText}`;
+          uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        }
+      } catch (error) {
+        console.error('Upload Error:', error);
+        uploadStatus.textContent = 'Upload failed. Check your connection and try again.';
+        uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+      } finally {
+        spinner.style.display = 'none';
+        uploadBtn.disabled = false;
+        gsap.to(uploadBtn, { y: 0, boxShadow: "0 10px 20px rgba(0,123,255,0.2)", duration: 0.2});
+      }
+    });
+
+    document.getElementById('getStartedBtn').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('uploadVideoSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      gsap.to(this, { y: -2, duration: 0.1, yoyo: true, repeat: 1, ease: 'power1.inOut'});
+    });
+
+    // Vanta.js commented out since using background image
+    // VANTA.BIRDS({...});
+
+    // Image Upload Functionality
+    const imageInput = document.getElementById('imageInput');
+    const imageDropArea = document.getElementById('imageDropArea');
+    const imagePreview = document.getElementById('imagePreview');
+    const uploadImageBtn = document.getElementById('uploadImageBtn');
+    const uploadImageStatus = document.getElementById('uploadImageStatus');
+    const analysisResults = document.getElementById('analysisResults');
+    const areaSelectionContainer = document.getElementById('areaSelectionContainer');
+
+    // Canvas and drawing elements
+    const imageCanvas = document.getElementById('imageCanvas');
+    const canvasCtx = imageCanvas.getContext('2d');
+    const selectionInfo = document.getElementById('selectionInfo');
+    const selectedAreaDisplay = document.getElementById('selectedAreaDisplay');
+    const estimatedCapacityDisplay = document.getElementById('estimatedCapacityDisplay');
+
+    // Control elements
+    const referenceLength = document.getElementById('referenceLength');
+    const setReferenceBtn = document.getElementById('setReferenceBtn');
+    const personalSpace = document.getElementById('personalSpace');
+    const rectTool = document.getElementById('rectTool');
+    const polygonTool = document.getElementById('polygonTool');
+    const freehandTool = document.getElementById('freehandTool');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+
+    // Results elements
+    const peopleCount = document.getElementById('peopleCount');
+    const selectedArea = document.getElementById('selectedArea');
+    const estimatedCapacity = document.getElementById('estimatedCapacity');
+    const currentDensity = document.getElementById('currentDensity');
+    const safetyBadge = document.getElementById('safetyBadge');
+    const densityProgress = document.getElementById('densityProgress');
+    const safetyAlert = document.getElementById('safetyAlert');
+    const safetyMessage = document.getElementById('safetyMessage');
+    const processedImageLink = document.getElementById('processedImageLink');
+    const exportResultsBtn = document.getElementById('exportResultsBtn');
+    const saveAnalysisBtn = document.getElementById('saveAnalysisBtn');
+    const jsonOutput = document.getElementById('jsonOutput');
+
+    const imageSpinner = uploadImageBtn.querySelector('.spinner-border');
+
+    // Canvas state variables
+    let originalImage = null;
+    let scaleFactor = 1; // pixels per meter
+    let isDrawing = false;
+    let currentTool = 'rectangle';
+    let drawingPath = [];
+    let selectedRegion = null;
+    let referenceLine = null;
+    let isSettingReference = false;
+
+    // Canvas utility functions
+    function resizeCanvasToImage(img) {
+      const container = imageCanvas.parentElement;
+      const maxWidth = container.clientWidth;
+      const maxHeight = 400;
+
+      const imgAspect = img.width / img.height;
+      const containerAspect = maxWidth / maxHeight;
+
+      let newWidth, newHeight;
+      if (imgAspect > containerAspect) {
+        newWidth = maxWidth;
+        newHeight = maxWidth / imgAspect;
+      } else {
+        newHeight = maxHeight;
+        newWidth = maxHeight * imgAspect;
+      }
+
+      imageCanvas.width = newWidth;
+      imageCanvas.height = newHeight;
+      return { width: newWidth, height: newHeight };
+    }
+
+    function drawImageToCanvas(img) {
+      canvasCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+      const canvasSize = resizeCanvasToImage(img);
+      canvasCtx.drawImage(img, 0, 0, canvasSize.width, canvasSize.height);
+    }
+
+    function calculateArea(shape) {
+      if (!shape) return 0;
+
+      if (shape.type === 'rectangle') {
+        const width = Math.abs(shape.endX - shape.startX);
+        const height = Math.abs(shape.endY - shape.startY);
+        const pixelArea = width * height;
+        return pixelArea / (scaleFactor * scaleFactor);
+      } else if (shape.type === 'polygon' || shape.type === 'freehand') {
+        // Use shoelace formula for polygon area
+        const points = shape.points || shape.path;
+        if (!points || points.length < 3) return 0;
+
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+          const j = (i + 1) % points.length;
+          area += points[i].x * points[j].y;
+          area -= points[j].x * points[i].y;
+        }
+        area = Math.abs(area) / 2;
+        return area / (scaleFactor * scaleFactor);
+      }
+      return 0;
+    }
+
+    function calculateCapacity(areaSqm, personalSpaceSqm) {
+      return Math.floor(areaSqm / personalSpaceSqm);
+    }
+
+    function updateSelectionInfo() {
+      if (selectedRegion) {
+        const area = calculateArea(selectedRegion);
+        const capacity = calculateCapacity(area, parseFloat(personalSpace.value));
+        selectedAreaDisplay.textContent = area.toFixed(2);
+        estimatedCapacityDisplay.textContent = capacity;
+        selectionInfo.style.display = 'block';
+      } else {
+        selectionInfo.style.display = 'none';
+      }
+    }
+
+    function drawSelection() {
+      if (!selectedRegion) return;
+
+      canvasCtx.strokeStyle = '#007bff';
+      canvasCtx.lineWidth = 3;
+      canvasCtx.fillStyle = 'rgba(0, 123, 255, 0.1)';
+
+      if (selectedRegion.type === 'rectangle') {
+        const width = selectedRegion.endX - selectedRegion.startX;
+        const height = selectedRegion.endY - selectedRegion.startY;
+        canvasCtx.fillRect(selectedRegion.startX, selectedRegion.startY, width, height);
+        canvasCtx.strokeRect(selectedRegion.startX, selectedRegion.startY, width, height);
+      } else if (selectedRegion.type === 'polygon' || selectedRegion.type === 'freehand') {
+        const points = selectedRegion.points || selectedRegion.path;
+        if (points && points.length > 1) {
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; i++) {
+            canvasCtx.lineTo(points[i].x, points[i].y);
+          }
+          if (selectedRegion.type === 'polygon') {
+            canvasCtx.closePath();
+          }
+          canvasCtx.fill();
+          canvasCtx.stroke();
+        }
+      }
+    }
+
+    function drawReferenceLine() {
+      if (!referenceLine) return;
+
+      canvasCtx.strokeStyle = '#ff0000';
+      canvasCtx.lineWidth = 3;
+      canvasCtx.setLineDash([5, 5]);
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(referenceLine.startX, referenceLine.startY);
+      canvasCtx.lineTo(referenceLine.endX, referenceLine.endY);
+      canvasCtx.stroke();
+      canvasCtx.setLineDash([]);
+
+      // Draw length text
+      const midX = (referenceLine.startX + referenceLine.endX) / 2;
+      const midY = (referenceLine.startY + referenceLine.endY) / 2;
+      canvasCtx.fillStyle = '#ff0000';
+      canvasCtx.font = '14px Arial';
+      canvasCtx.fillText(`${referenceLine.length.toFixed(2)}m`, midX + 5, midY - 5);
+    }
+
+    function redrawCanvas() {
+      if (originalImage) {
+        drawImageToCanvas(originalImage);
+        drawReferenceLine();
+        drawSelection();
+      }
+    }
+
+    // Canvas event handlers
+    function getMousePos(e) {
+      const rect = imageCanvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
+    imageCanvas.addEventListener('mousedown', (e) => {
+      if (isSettingReference) {
+        const pos = getMousePos(e);
+        if (!referenceLine) {
+          referenceLine = { startX: pos.x, startY: pos.y };
+        } else {
+          const pixelDistance = Math.sqrt(
+            Math.pow(pos.x - referenceLine.startX, 2) +
+            Math.pow(pos.y - referenceLine.startY, 2)
+          );
+          const realDistance = parseFloat(referenceLength.value);
+          scaleFactor = pixelDistance / realDistance;
+          referenceLine.endX = pos.x;
+          referenceLine.endY = pos.y;
+          referenceLine.length = realDistance;
+          isSettingReference = false;
+          setReferenceBtn.textContent = 'Set Reference Line';
+          setReferenceBtn.classList.remove('btn-success');
+          setReferenceBtn.classList.add('btn-outline-primary');
+          updateSelectionInfo();
+          redrawCanvas();
+        }
+        return;
+      }
+
+      if (!originalImage) return;
+
+      const pos = getMousePos(e);
+      isDrawing = true;
+      drawingPath = [pos];
+
+      if (currentTool === 'rectangle') {
+        selectedRegion = {
+          type: 'rectangle',
+          startX: pos.x,
+          startY: pos.y,
+          endX: pos.x,
+          endY: pos.y
+        };
+      } else {
+        selectedRegion = {
+          type: currentTool,
+          points: [pos]
+        };
+      }
+    });
+
+    imageCanvas.addEventListener('mousemove', (e) => {
+      if (!isDrawing || !selectedRegion) return;
+
+      const pos = getMousePos(e);
+
+      if (currentTool === 'rectangle') {
+        selectedRegion.endX = pos.x;
+        selectedRegion.endY = pos.y;
+      } else {
+        selectedRegion.points.push(pos);
+      }
+
+      redrawCanvas();
+      updateSelectionInfo();
+    });
+
+    imageCanvas.addEventListener('mouseup', () => {
+      isDrawing = false;
+      updateSelectionInfo();
+    });
+
+    // Tool selection handlers
+    rectTool.addEventListener('click', () => {
+      currentTool = 'rectangle';
+      [rectTool, polygonTool, freehandTool].forEach(btn => btn.classList.remove('active'));
+      rectTool.classList.add('active');
+    });
+
+    polygonTool.addEventListener('click', () => {
+      currentTool = 'polygon';
+      [rectTool, polygonTool, freehandTool].forEach(btn => btn.classList.remove('active'));
+      polygonTool.classList.add('active');
+    });
+
+    freehandTool.addEventListener('click', () => {
+      currentTool = 'freehand';
+      [rectTool, polygonTool, freehandTool].forEach(btn => btn.classList.remove('active'));
+      freehandTool.classList.add('active');
+    });
+
+    clearSelectionBtn.addEventListener('click', () => {
+      selectedRegion = null;
+      updateSelectionInfo();
+      redrawCanvas();
+    });
+
+    setReferenceBtn.addEventListener('click', () => {
+      isSettingReference = !isSettingReference;
+      if (isSettingReference) {
+        referenceLine = null;
+        setReferenceBtn.textContent = 'Click two points on known length';
+        setReferenceBtn.classList.remove('btn-outline-primary');
+        setReferenceBtn.classList.add('btn-success');
+      } else {
+        setReferenceBtn.textContent = 'Set Reference Line';
+        setReferenceBtn.classList.remove('btn-success');
+        setReferenceBtn.classList.add('btn-outline-primary');
+      }
+      redrawCanvas();
+    });
+
+    // Update capacity when personal space changes
+    personalSpace.addEventListener('input', updateSelectionInfo);
+
+    // Drag and Drop for Image
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      imageDropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      imageDropArea.addEventListener(eventName, highlightImage, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      imageDropArea.addEventListener(eventName, unhighlightImage, false);
+    });
+
+    function highlightImage(e) {
+      imageDropArea.classList.add('dragover');
+    }
+
+    function unhighlightImage(e) {
+      imageDropArea.classList.remove('dragover');
+    }
+
+    imageDropArea.addEventListener('drop', handleImageDrop, false);
+
+    function handleImageDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        imageInput.files = files;
+        imageInput.dispatchEvent(new Event('change'));
+      }
+    }
+
+    imageDropArea.addEventListener('click', () => {
+      imageInput.click();
+    });
+
+    imageInput.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        originalImage = new Image();
+        originalImage.onload = function() {
+          // Hide preview, show canvas
+          imagePreview.style.display = 'none';
+          areaSelectionContainer.style.display = 'block';
+
+          // Draw image to canvas
+          drawImageToCanvas(originalImage);
+
+          // Reset selections
+          selectedRegion = null;
+          referenceLine = null;
+          scaleFactor = 1; // Reset to default
+          updateSelectionInfo();
+
+          uploadImageStatus.textContent = 'Image loaded. Set reference scale and select analysis area.';
+          uploadImageStatus.className = 'mt-3 text-center status-message text-info';
+          gsap.fromTo(areaSelectionContainer, {opacity:0, y: 20}, {opacity:1, y: 0, duration: 0.5, ease: 'power2.out'});
+        };
+        originalImage.src = url;
+        analysisResults.style.display = 'none';
+      } else {
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+        areaSelectionContainer.style.display = 'none';
+        if (file) {
+          uploadImageStatus.textContent = 'Invalid file. Please select an image (JPG, PNG, BMP, TIFF).';
+          uploadImageStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        } else {
+          uploadImageStatus.textContent = '';
+          uploadImageStatus.className = 'mt-3 text-center status-message';
+        }
+        analysisResults.style.display = 'none';
+      }
+    });
+
+    uploadImageBtn.addEventListener('click', async () => {
+      const file = imageInput.files[0];
+      if (!file) {
+        uploadImageStatus.textContent = 'Please select an image file first!';
+        uploadImageStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        gsap.fromTo(uploadImageStatus, {x: -8}, {x: 8, duration: 0.07, yoyo: true, repeat: 5, ease: 'power1.inOut', clearProps:"x"});
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        uploadImageStatus.textContent = 'Invalid file type. Please select an image.';
+        uploadImageStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        return;
+      }
+
+      // Validate area selection
+      if (!selectedRegion) {
+        uploadImageStatus.textContent = 'Please select an analysis area on the image first!';
+        uploadImageStatus.className = 'mt-3 text-center status-message text-warning fw-bold';
+        gsap.fromTo(uploadImageStatus, {x: -8}, {x: 8, duration: 0.07, yoyo: true, repeat: 5, ease: 'power1.inOut', clearProps:"x"});
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      // Add area selection data
+      const selectedAreaSqm = calculateArea(selectedRegion);
+      formData.append('selected_area_sqm', selectedAreaSqm.toString());
+      formData.append('scale_factor', scaleFactor.toString());
+      formData.append('personal_space', personalSpace.value);
+
+      // Add region coordinates for server-side processing
+      if (selectedRegion.type === 'rectangle') {
+        formData.append('region_type', 'rectangle');
+        formData.append('region_data', JSON.stringify({
+          startX: selectedRegion.startX,
+          startY: selectedRegion.startY,
+          endX: selectedRegion.endX,
+          endY: selectedRegion.endY
+        }));
+      } else {
+        formData.append('region_type', selectedRegion.type);
+        formData.append('region_data', JSON.stringify(selectedRegion.points || selectedRegion.path));
+      }
+
+      uploadImageStatus.textContent = 'Processing image... Analyzing crowd patterns in selected area.';
+      uploadImageStatus.className = 'mt-3 text-center status-message text-info';
+      imageSpinner.style.display = 'inline-block';
+      uploadImageBtn.disabled = true;
+      gsap.to(uploadImageBtn, { y: -2, boxShadow: "0 4px 10px rgba(40, 167, 69, 0.2)", duration: 0.1});
+
+      try {
+        const response = await fetch('/upload_image', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          uploadImageStatus.textContent = `Analysis Complete! ${result.message || 'Crowd analysis results are ready.'}`;
+          uploadImageStatus.className = 'mt-3 text-center status-message text-success fw-bold';
+          gsap.fromTo(uploadImageStatus, {scale: 0.9, opacity:0}, {scale: 1, opacity:1, duration: 0.4, ease: 'back.out(1.7)'});
+
+          // Display enhanced results
+          displayAnalysisResults(result);
+        } else {
+          const errorResult = await response.json().catch(() => ({ detail: "Server error. Please try again." }));
+          uploadImageStatus.textContent = `Error ${response.status}: ${errorResult.detail || response.statusText}`;
+          uploadImageStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        }
+      } catch (error) {
+        console.error('Upload Error:', error);
+        uploadImageStatus.textContent = 'Upload failed. Check your connection and try again.';
+        uploadImageStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+      } finally {
+        imageSpinner.style.display = 'none';
+        uploadImageBtn.disabled = false;
+        gsap.to(uploadImageBtn, { y: 0, boxShadow: "0 10px 20px rgba(40, 167, 69, 0.2)", duration: 0.2});
+      }
+    });
+
+    function displayAnalysisResults(result) {
+      // Update results display
+      peopleCount.textContent = result.detected_people_count || result.people_count || 0;
+      selectedArea.textContent = (result.selected_area_sqm || 0).toFixed(2);
+      estimatedCapacity.textContent = result.estimated_max_capacity || 0;
+      currentDensity.textContent = result.current_density || 0;
+
+      // Update safety status
+      const safetyStatus = result.safety_status || 'safe';
+      safetyBadge.textContent = safetyStatus.charAt(0).toUpperCase() + safetyStatus.slice(1);
+      safetyBadge.className = `badge fs-5 px-3 py-2 ${
+        safetyStatus === 'safe' ? 'bg-success' :
+        safetyStatus === 'caution' ? 'bg-warning text-dark' :
+        safetyStatus === 'warning' ? 'bg-warning text-dark' :
+        'bg-danger'
+      }`;
+
+      // Update density progress bar
+      const densityPercentage = result.current_density_percentage || 0;
+      densityProgress.style.width = `${Math.min(densityPercentage, 100)}%`;
+      densityProgress.className = `progress-bar ${
+        densityPercentage < 50 ? 'bg-success' :
+        densityPercentage < 80 ? 'bg-warning' :
+        'bg-danger'
+      }`;
+
+      // Show safety alert if needed
+      if (safetyStatus !== 'safe') {
+        safetyAlert.style.display = 'block';
+        safetyMessage.textContent = `Current density is ${densityPercentage.toFixed(1)}% of maximum capacity. ${
+          safetyStatus === 'caution' ? 'Monitor closely.' :
+          safetyStatus === 'warning' ? 'Consider crowd management measures.' :
+          'Immediate action required!'
+        }`;
+      } else {
+        safetyAlert.style.display = 'none';
+      }
+
+      // Set processed image link
+      if (result.processed_image) {
+        processedImageLink.href = result.processed_image;
+      }
+
+      // Store JSON output
+      const jsonData = {
+        selected_area_sqm: result.selected_area_sqm || 0,
+        detected_people_count: result.detected_people_count || result.people_count || 0,
+        estimated_max_capacity: result.estimated_max_capacity || 0,
+        current_density_percentage: result.current_density_percentage || 0,
+        safety_status: result.safety_status || 'safe',
+        processing_time_ms: result.processing_time_ms || 0
+      };
+      jsonOutput.textContent = JSON.stringify(jsonData, null, 2);
+
+      // Show results
+      analysisResults.style.display = 'block';
+      gsap.fromTo(analysisResults, {opacity:0, y: 20}, {opacity:1, y: 0, duration: 0.5, ease: 'power2.out'});
+    }
+
+    // Export functionality
+    exportResultsBtn.addEventListener('click', () => {
+      const data = jsonOutput.textContent;
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `crowd_analysis_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // Save analysis functionality (store in localStorage for now)
+    saveAnalysisBtn.addEventListener('click', () => {
+      const analysis = {
+        timestamp: new Date().toISOString(),
+        data: JSON.parse(jsonOutput.textContent),
+        image_name: imageInput.files[0]?.name || 'unknown'
+      };
+
+      const savedAnalyses = JSON.parse(localStorage.getItem('crowdAnalyses') || '[]');
+      savedAnalyses.push(analysis);
+      localStorage.setItem('crowdAnalyses', JSON.stringify(savedAnalyses));
+
+      // Show success message
+      const originalText = saveAnalysisBtn.innerHTML;
+      saveAnalysisBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved!';
+      saveAnalysisBtn.classList.remove('btn-outline-info');
+      saveAnalysisBtn.classList.add('btn-success');
+
+      setTimeout(() => {
+        saveAnalysisBtn.innerHTML = originalText;
+        saveAnalysisBtn.classList.remove('btn-success');
+        saveAnalysisBtn.classList.add('btn-outline-info');
+      }, 2000);
+    });
+
+    // Batch Processing Functionality
+    const batchInput = document.getElementById('batchInput');
+    const batchDropArea = document.getElementById('batchDropArea');
+    const batchFileList = document.getElementById('batchFileList');
+    const fileListContainer = document.getElementById('fileListContainer');
+    const batchSettings = document.getElementById('batchSettings');
+    const batchProcessBtn = document.getElementById('batchProcessBtn');
+    const batchStatus = document.getElementById('batchStatus');
+    const batchResults = document.getElementById('batchResults');
+    const batchResultsTable = document.getElementById('batchResultsTable');
+    const exportBatchCSV = document.getElementById('exportBatchCSV');
+    const exportBatchPDF = document.getElementById('exportBatchPDF');
+    const batchPersonalSpace = document.getElementById('batchPersonalSpace');
+    const batchScaleFactor = document.getElementById('batchScaleFactor');
+
+    let batchFiles = [];
+
+    // Batch drag and drop
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      batchDropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      batchDropArea.addEventListener(eventName, () => batchDropArea.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      batchDropArea.addEventListener(eventName, () => batchDropArea.classList.remove('dragover'), false);
+    });
+
+    batchDropArea.addEventListener('drop', handleBatchDrop, false);
+
+    function handleBatchDrop(e) {
+      const dt = e.dataTransfer;
+      const files = Array.from(dt.files);
+      addBatchFiles(files);
+    }
+
+    batchDropArea.addEventListener('click', () => {
+      batchInput.click();
+    });
+
+    batchInput.addEventListener('change', function(event) {
+      const files = Array.from(event.target.files);
+      addBatchFiles(files);
+    });
+
+    function addBatchFiles(files) {
+      // Filter valid files and limit to 10
+      const validFiles = files.filter(file => {
+        const isValidType = file.type.startsWith('image/') || file.type.startsWith('video/');
+        const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB
+        return isValidType && isValidSize;
+      }).slice(0, 10 - batchFiles.length);
+
+      batchFiles.push(...validFiles);
+      updateBatchFileList();
+
+      if (batchFiles.length > 0) {
+        batchFileList.style.display = 'block';
+        batchSettings.style.display = 'block';
+        batchProcessBtn.style.display = 'block';
+      }
+    }
+
+    function updateBatchFileList() {
+      fileListContainer.innerHTML = '';
+      batchFiles.forEach((file, index) => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'd-flex justify-content-between align-items-center mb-2 p-2 bg-dark rounded';
+        fileItem.innerHTML = `
+          <div>
+            <i class="bi ${file.type.startsWith('image/') ? 'bi-image' : 'bi-film'} me-2"></i>
+            ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)
+          </div>
+          <button class="btn btn-sm btn-outline-danger" onclick="removeBatchFile(${index})">
+            <i class="bi bi-trash"></i>
+          </button>
+        `;
+        fileListContainer.appendChild(fileItem);
+      });
+    }
+
+    function removeBatchFile(index) {
+      batchFiles.splice(index, 1);
+      updateBatchFileList();
+
+      if (batchFiles.length === 0) {
+        batchFileList.style.display = 'none';
+        batchSettings.style.display = 'none';
+        batchProcessBtn.style.display = 'none';
+        batchResults.style.display = 'none';
+      }
+    }
+
+    // Make removeBatchFile global
+    window.removeBatchFile = removeBatchFile;
+
+    batchProcessBtn.addEventListener('click', async () => {
+      if (batchFiles.length === 0) return;
+
+      batchStatus.textContent = 'Processing files... Please wait.';
+      batchStatus.className = 'mt-3 text-center status-message text-info';
+      batchProcessBtn.disabled = true;
+      batchProcessBtn.querySelector('.spinner-border').style.display = 'inline-block';
+
+      const formData = new FormData();
+      batchFiles.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('personal_space', batchPersonalSpace.value);
+      formData.append('scale_factor', batchScaleFactor.value);
+
+      try {
+        const response = await fetch('/batch_process', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const results = await response.json();
+          displayBatchResults(results);
+          batchStatus.textContent = `Batch processing completed! Processed ${results.length} files.`;
+          batchStatus.className = 'mt-3 text-center status-message text-success fw-bold';
+        } else {
+          const errorResult = await response.json().catch(() => ({ detail: "Server error. Please try again." }));
+          batchStatus.textContent = `Error: ${errorResult.detail || response.statusText}`;
+          batchStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+        }
+      } catch (error) {
+        console.error('Batch processing error:', error);
+        batchStatus.textContent = 'Batch processing failed. Check your connection and try again.';
+        batchStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+      } finally {
+        batchProcessBtn.disabled = false;
+        batchProcessBtn.querySelector('.spinner-border').style.display = 'none';
+      }
+    });
+
+    function displayBatchResults(results) {
+      batchResultsTable.innerHTML = '';
+      results.forEach(result => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${result.filename}</td>
+          <td>${result.detected_people_count}</td>
+          <td>${result.selected_area_sqm?.toFixed(2) || 'N/A'}</td>
+          <td>${result.estimated_max_capacity || 'N/A'}</td>
+          <td>
+            <span class="badge ${
+              result.safety_status === 'safe' ? 'bg-success' :
+              result.safety_status === 'caution' ? 'bg-warning text-dark' :
+              result.safety_status === 'warning' ? 'bg-warning text-dark' :
+              'bg-danger'
+            }">${result.safety_status}</span>
+          </td>
+          <td>
+            <a href="${result.processed_file}" target="_blank" class="btn btn-sm btn-outline-primary me-1">
+              <i class="bi bi-eye"></i>
+            </a>
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportSingleResult('${result.filename}', ${JSON.stringify(result).replace(/"/g, '"')})">
+              <i class="bi bi-download"></i>
+            </button>
+          </td>
+        `;
+        batchResultsTable.appendChild(row);
+      });
+      batchResults.style.display = 'block';
+    }
+
+    // Export batch results
+    exportBatchCSV.addEventListener('click', () => {
+      // This would be implemented with actual CSV generation
+      alert('CSV export functionality would be implemented here');
+    });
+
+    exportBatchPDF.addEventListener('click', () => {
+      // This would be implemented with PDF generation library
+      alert('PDF export functionality would be implemented here');
+    });
+
+    function exportSingleResult(filename, resultData) {
+      const dataStr = JSON.stringify(resultData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `crowd_analysis_${filename.replace(/\.[^/.]+$/, '')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // Make exportSingleResult global
+    window.exportSingleResult = exportSingleResult;
+
+    // Smooth scrolling for navbar links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

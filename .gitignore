@@ -1,0 +1,40 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Model weights (too large for GitHub)
+*.pt
+
+# Processed/uploaded media files
+static/uploads/
+static/processed/
+
+# Training runs outputs
+runs/
+
+# Cache files
+*.cache
+
+# Large dataset (download separately)
+dataset/images/
+
+# Snapshots
+snapshots/
+
+# Lock files
+uv.lock

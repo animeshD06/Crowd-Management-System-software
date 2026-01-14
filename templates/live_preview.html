@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Camera Feed | Crowd Management System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    :root {
+      /* Light theme variables */
+      --bg-gradient: linear-gradient(135deg, #edf6ff 0%, #e6f2ff 100%);
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --text-primary: #333333;
+      --text-secondary: #6c757d;
+      --border-color: #e9ecef;
+      --shadow-color: rgba(0, 123, 255, 0.1);
+      --card-bg: #ffffff;
+      --progress-bg: rgba(0, 0, 0, 0.1);
+      --modal-bg: rgba(0, 0, 0, 0.7);
+      --loading-bg: rgba(255, 255, 255, 0.95);
+      --error-bg: rgba(255, 255, 255, 0.98);
+    }
+
+    [data-theme="dark"] {
+      /* Dark theme variables */
+      --bg-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      --bg-primary: #2d3748;
+      --bg-secondary: #4a5568;
+      --text-primary: #e2e8f0;
+      --text-secondary: #a0aec0;
+      --border-color: #4a5568;
+      --shadow-color: rgba(0, 123, 255, 0.2);
+      --card-bg: #2d3748;
+      --progress-bg: rgba(255, 255, 255, 0.1);
+      --modal-bg: rgba(0, 0, 0, 0.8);
+      --loading-bg: rgba(45, 55, 72, 0.95);
+      --error-bg: rgba(45, 55, 72, 0.98);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: var(--bg-gradient);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* Compact Header */
+    .page-header {
+      text-align: center;
+      padding: 1rem 0 0.5rem 0;
+      opacity: 0;
+    }
+    .page-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #102a43;
+      margin-bottom: 0.25rem;
+    }
+    .page-subtitle {
+      font-size: 0.9rem;
+      color: #486581;
+      font-weight: 500;
+    }
+
+    /* Main Container - Optimized for viewport */
+    .live-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 15px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Compact Stats Bar */
+    .stats-bar {
+      background: var(--card-bg);
+      border-radius: 0.75rem;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+      opacity: 0;
+      flex-shrink: 0;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 0.25rem;
+      position: relative;
+    }
+    .stat-number {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #007bff;
+      display: block;
+      line-height: 1.2;
+      transition: color 0.3s ease;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Enhanced Progress Bars */
+    .progress-container {
+      margin-top: 0.5rem;
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease, background-color 0.3s ease;
+      position: relative;
+    }
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Color-coded status indicators */
+    .stat-item.normal .stat-number { color: #28a745; }
+    .stat-item.warning .stat-number { color: #ffc107; }
+    .stat-item.alert .stat-number { color: #dc3545; }
+    .stat-item.normal .progress-bar { background: linear-gradient(90deg, #28a745, #20c997); }
+    .stat-item.warning .progress-bar { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+    .stat-item.alert .progress-bar { background: linear-gradient(90deg, #dc3545, #e83e8c); }
+
+    /* Status badges */
+    .status-badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .status-badge.normal { background: #28a745; }
+    .status-badge.warning { background: #ffc107; }
+    .status-badge.alert { background: #dc3545; }
+
+    /* Main Content Area - Flexible */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* Stream Container - Responsive height */
+    .stream-container {
+      position: relative;
+      background: var(--card-bg);
+      padding: 1rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 20px var(--shadow-color);
+      margin-bottom: 1rem;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+      cursor: pointer;
+      opacity: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      overflow: hidden;
+    }
+    .stream-container:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(0, 123, 255, 0.15);
+    }
+    .stream-container img {
+      width: 100%;
+      height: auto;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 0.75rem;
+      border: 2px solid #f8f9fa;
+      transition: opacity 0.3s ease;
+    }
+
+    /* Loading and Error States */
+    .loading-overlay, .error-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--loading-bg);
+      border-radius: 0.75rem;
+      z-index: 10;
+      backdrop-filter: blur(2px);
+      transition: background 0.3s ease;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-text, .error-text {
+      color: #6c757d;
+      font-weight: 500;
+      text-align: center;
+      padding: 0 1rem;
+    }
+
+    .error-overlay {
+      background: var(--error-bg);
+    }
+
+    .error-icon {
+      font-size: 3rem;
+      color: #dc3545;
+      margin-bottom: 1rem;
+    }
+
+    .retry-btn {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+
+    .retry-btn:hover {
+      background: #c82333;
+    }
+
+    /* Compact Controls */
+    .controls-section {
+      text-align: center;
+      margin-bottom: 1rem;
+      opacity: 0;
+      flex-shrink: 0;
+    }
+    .toggle-btn {
+      padding: 0.6rem 1.5rem;
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 3px 12px rgba(0, 123, 255, 0.25);
+      margin: 0 0.4rem;
+    }
+    .toggle-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(0, 123, 255, 0.35);
+    }
+    .toggle-btn:active {
+      transform: scale(0.98);
+    }
+    .btn-secondary {
+      background: linear-gradient(135deg, #6c757d, #495057);
+      box-shadow: 0 3px 12px rgba(108, 117, 125, 0.25);
+    }
+
+    /* Enhanced Heatmap Button */
+    .heatmap-btn {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    .heatmap-btn.loading {
+      pointer-events: none;
+    }
+    .heatmap-btn.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
+      border: 2px solid transparent;
+      border-top: 2px solid currentColor;
+      border-radius: 50%;
+      animation: button-spin 1s linear infinite;
+    }
+    .heatmap-btn.loading .bi,
+    .heatmap-btn.loading span {
+      opacity: 0;
+    }
+    @keyframes button-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .heatmap-btn.enabled {
+      background: linear-gradient(135deg, #dc3545, #c82333);
+      box-shadow: 0 3px 12px rgba(220, 53, 69, 0.4);
+    }
+    .heatmap-btn.enabled:hover {
+      background: linear-gradient(135deg, #c82333, #bd2130);
+      box-shadow: 0 4px 15px rgba(220, 53, 69, 0.5);
+    }
+
+    .heatmap-btn.success::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(40, 167, 69, 0.3), transparent);
+      animation: success-flash 0.6s ease;
+    }
+    @keyframes success-flash {
+      0% { left: -100%; }
+      50% { left: 0%; }
+      100% { left: 100%; }
+    }
+
+    /* FIXED: Full-width Info Panel */
+    .info-panel {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+      border-radius: 12px;
+      margin: 0 -15px 0 -15px; /* Extend beyond container padding */
+      padding: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      flex-shrink: 0;
+      position: relative;
+      width: calc(100% + 30px); /* Account for negative margins */
+    }
+    
+    /* FIXED: Proper header styling */
+    .info-header {
+      padding: 1rem 2rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0,0,0,0.1);
+      font-weight: 600;
+      font-size: 1rem;
+      border: none;
+      width: 100%;
+    }
+    .info-header:hover {
+      background: rgba(0,0,0,0.15);
+    }
+    
+    /* FIXED: Content area with proper padding */
+    .info-content {
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+    .info-panel.expanded .info-content {
+      max-height: 200px;
+      padding: 1.5rem 2rem;
+    }
+    
+    /* FIXED: Better content layout */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    .info-section h6 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+    }
+    .info-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .info-list li {
+      padding: 0.4rem 0;
+      display: flex;
+      align-items: center;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+    .info-list i {
+      margin-right: 0.75rem;
+      width: 18px;
+      color: rgba(255,255,255,0.9);
+    }
+    
+    /* FIXED: Expand icon animation */
+    .expand-icon {
+      transition: transform 0.3s ease;
+      font-size: 1.2rem;
+    }
+    .info-panel.expanded .expand-icon {
+      transform: rotate(180deg);
+    }
+
+    /* Enhanced Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--modal-bg);
+      backdrop-filter: blur(8px);
+    }
+    .modal-content {
+      background: var(--card-bg);
+      margin: 2% auto;
+      padding: 0;
+      border-radius: 1rem;
+      width: 95%;
+      max-width: 800px;
+      max-height: 95vh;
+      position: relative;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+      transform: scale(0.7);
+      opacity: 0;
+      transition: all 0.3s ease;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal.show .modal-content {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    /* Enhanced Modal Header */
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2rem;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      position: relative;
+    }
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .modal-info {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* Navigation Controls */
+    .modal-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .nav-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .nav-btn:hover {
+      background: var(--bg-secondary);
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    .nav-btn:active {
+      transform: scale(0.95);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Close Button */
+    .close {
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 35px;
+      height: 35px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .close:hover {
+      transform: scale(1.1);
+      background: #c82333;
+    }
+
+    /* Modal Body */
+    .modal-body {
+      flex: 1;
+      position: relative;
+      background: var(--bg-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 400px;
+    }
+    .modal-content img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      transition: transform 0.3s ease;
+    }
+
+    /* Zoom Controls */
+    .zoom-controls {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 10;
+    }
+    .zoom-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .zoom-btn:hover {
+      background: var(--bg-secondary);
+      transform: scale(1.05);
+    }
+
+    /* Grid Overlay */
+    .grid-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: calc(100% / 6) calc(100% / 6);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .grid-overlay.active {
+      opacity: 1;
+    }
+
+    /* Dark Mode Toggle */
+    .theme-toggle {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 1000;
+      background: var(--card-bg);
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+    .theme-toggle:active {
+      transform: scale(0.95);
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      top: 4rem;
+      right: 1rem;
+      z-index: 1100;
+      max-width: 400px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--card-bg);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      border-left: 4px solid;
+      transform: translateX(100%);
+      opacity: 0;
+      transition: all 0.3s ease;
+      pointer-events: auto;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      backdrop-filter: blur(10px);
+    }
+    .toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    .toast.success { border-left-color: #28a745; }
+    .toast.warning { border-left-color: #ffc107; }
+    .toast.error { border-left-color: #dc3545; }
+    .toast.info { border-left-color: #17a2b8; }
+
+    .toast-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+    .toast-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .toast-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }
+    .toast-message {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .toast-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .toast-close:hover {
+      background: rgba(0, 0, 0, 0.1);
+      color: var(--text-primary);
+    }
+
+    /* Notification Badge */
+    .notification-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: #dc3545;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      display: none;
+    }
+    .notification-badge.show {
+      display: flex;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .page-title {
+        font-size: 1.5rem;
+      }
+      .stat-number {
+        font-size: 1.25rem;
+      }
+      .stat-label {
+        font-size: 0.7rem;
+      }
+      .toggle-btn {
+        padding: 0.5rem 1.2rem;
+        font-size: 0.9rem;
+        margin: 0.2rem;
+      }
+      .stream-container {
+        min-height: 250px;
+      }
+      .info-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      .info-header {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+      }
+      .info-panel.expanded .info-content {
+        padding: 1rem;
+      }
+    }
+
+    @media (max-height: 700px) {
+      .page-header {
+        padding: 0.5rem 0 0.25rem 0;
+      }
+      .stats-bar {
+        padding: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .stream-container {
+        min-height: 200px;
+      }
+    }
+  </style>
+</head>
+<body>
+<!-- Dark Mode Toggle -->
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+  <i class="bi bi-moon-fill" id="themeIcon"></i>
+  <div class="notification-badge" id="notificationBadge">!</div>
+</button>
+
+<!-- Toast Notifications Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="live-container">
+    <!-- Compact Header -->
+    <div class="page-header">
+      <h1 class="page-title">Live Camera Feed</h1>
+      <p class="page-subtitle">Real-time Crowd Analysis & Monitoring</p>
+    </div>
+
+    <!-- Enhanced Stats Bar -->
+    <div class="stats-bar">
+      <div class="row g-2">
+        <div class="col-3">
+          <div class="stat-item" id="peopleStat">
+            <span class="stat-number" id="peopleCount">--</span>
+            <span class="stat-label">People</span>
+            <div class="progress-container">
+              <div class="progress-bar" id="peopleProgress" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="stat-item" id="densityStat">
+            <span class="stat-number" id="densityLevel">--</span>
+            <span class="stat-label">Density</span>
+            <div class="progress-container">
+              <div class="progress-bar" id="densityProgress" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="stat-item" id="alertStat">
+            <div class="status-badge" id="statusBadge"></div>
+            <span class="stat-number" id="alertStatus">--</span>
+            <span class="stat-label">Status</span>
+            <div class="progress-container">
+              <div class="progress-bar" id="alertProgress" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="stat-item" id="uptimeStat">
+            <span class="stat-number" id="uptime">00:00</span>
+            <span class="stat-label">Uptime</span>
+            <div class="progress-container">
+              <div class="progress-bar" id="uptimeProgress" style="width: 100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- Stream Container -->
+      <div class="stream-container" id="mainFeed">
+        <!-- Loading State -->
+        <div class="loading-overlay" id="loadingOverlay">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">Loading live feed...</div>
+        </div>
+
+        <!-- Error State -->
+        <div class="error-overlay" id="errorOverlay" style="display: none;">
+          <div class="error-icon">⚠️</div>
+          <div class="error-text">Unable to load video feed<br>Please check your connection</div>
+          <button class="retry-btn" onclick="retryFeed()">Retry</button>
+        </div>
+
+        <img src="{{ url_for('video_feed') }}" alt="Live Stream" id="mainImage" style="display: none;" />
+      </div>
+    </div>
+
+    <!-- Enhanced Controls -->
+    <div class="controls-section">
+      <button class="toggle-btn heatmap-btn" id="heatmapBtn" onclick="toggleHeatmap()">
+        <i class="bi bi-thermometer-half me-1"></i><span id="heatmapBtnText">Enable Heat Map</span>
+      </button>
+      <button class="toggle-btn btn-secondary" onclick="window.location.href='/'">
+        <i class="bi bi-house me-1"></i>Dashboard
+      </button>
+    </div>
+
+    <!-- FIXED: Full-width Info Panel -->
+    <div class="info-panel" id="infoPanel">
+      <div class="info-header" onclick="toggleInfoPanel()">
+        <span><i class="bi bi-info-circle me-2"></i>How to Use & System Status</span>
+        <i class="bi bi-chevron-down expand-icon"></i>
+      </div>
+      <div class="info-content">
+        <div class="info-grid">
+          <div class="info-section">
+            <h6><i class="bi bi-mouse me-2"></i>Instructions</h6>
+            <ul class="info-list">
+              <li><i class="bi bi-cursor"></i>Click video to zoom into areas</li>
+              <li><i class="bi bi-eye"></i>Blue boxes show detected people</li>
+              <li><i class="bi bi-thermometer"></i>Toggle heatmap for density view</li>
+            </ul>
+          </div>
+          <div class="info-section">
+            <h6><i class="bi bi-gear me-2"></i>System Status</h6>
+            <ul class="info-list">
+              <li><i class="bi bi-cpu"></i>YOLO11x: Active</li>
+              <li><i class="bi bi-camera-video"></i>Feed: Live</li>
+              <li><i class="bi bi-shield-check"></i>Monitoring: Enabled</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enhanced Zoom Modal -->
+  <div id="zoomModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">
+            <i class="bi bi-zoom-in me-2"></i>Magnified View
+          </h2>
+          <div class="modal-info" id="cellInfo">Cell: Row 0, Col 0</div>
+        </div>
+        <div class="modal-nav">
+          <button class="nav-btn" id="prevCell" title="Previous Cell">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <button class="nav-btn" id="gridToggle" title="Toggle Grid">
+            <i class="bi bi-grid-3x3"></i>
+          </button>
+          <button class="nav-btn" id="zoomIn" title="Zoom In">
+            <i class="bi bi-zoom-in"></i>
+          </button>
+          <button class="nav-btn" id="zoomOut" title="Zoom Out">
+            <i class="bi bi-zoom-out"></i>
+          </button>
+          <button class="nav-btn" id="nextCell" title="Next Cell">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+          <button class="close" id="modalClose" title="Close">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="grid-overlay" id="gridOverlay"></div>
+        <div class="zoom-controls">
+          <button class="zoom-btn" id="zoomInBottom" title="Zoom In">
+            <i class="bi bi-zoom-in"></i>
+          </button>
+          <button class="zoom-btn" id="zoomOutBottom" title="Zoom Out">
+            <i class="bi bi-zoom-out"></i>
+          </button>
+        </div>
+        <img src="{{ url_for('zoom_feed') }}" alt="Zoomed Cell" id="zoomedImg" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Grid configuration
+    const gridRows = 6;
+    const gridCols = 6;
+    const actualWidth = 1280;
+    const actualHeight = 720;
+
+    // Zoom modal state
+    let currentRow = 0;
+    let currentCol = 0;
+    let zoomLevel = 1;
+    let gridVisible = false;
+
+    // DOM elements
+    const mainFeed = document.getElementById("mainFeed");
+    const mainImage = document.getElementById("mainImage");
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    const errorOverlay = document.getElementById("errorOverlay");
+    const modal = document.getElementById("zoomModal");
+    const modalClose = document.getElementById("modalClose");
+    const zoomedImg = document.getElementById("zoomedImg");
+    const cellInfo = document.getElementById("cellInfo");
+    const gridOverlay = document.getElementById("gridOverlay");
+    const infoPanel = document.getElementById("infoPanel");
+
+    // Navigation elements
+    const prevCell = document.getElementById("prevCell");
+    const nextCell = document.getElementById("nextCell");
+    const gridToggle = document.getElementById("gridToggle");
+    const zoomIn = document.getElementById("zoomIn");
+    const zoomOut = document.getElementById("zoomOut");
+    const zoomInBottom = document.getElementById("zoomInBottom");
+    const zoomOutBottom = document.getElementById("zoomOutBottom");
+
+    // Initialize animations
+    window.addEventListener('DOMContentLoaded', () => {
+      // Quick, smooth animations
+      gsap.to(".page-header", { opacity: 1, duration: 0.6, ease: "power2.out" });
+      gsap.to(".stats-bar", { opacity: 1, duration: 0.6, delay: 0.1, ease: "power2.out" });
+      gsap.to(".stream-container", { opacity: 1, duration: 0.6, delay: 0.2, ease: "power2.out" });
+      gsap.to(".controls-section", { opacity: 1, duration: 0.6, delay: 0.3, ease: "power2.out" });
+      gsap.to(".info-panel", { opacity: 1, duration: 0.6, delay: 0.4, ease: "power2.out" });
+
+      startUptimeCounter();
+      updateStats();
+    });
+
+    // Toggle info panel
+    function toggleInfoPanel() {
+      infoPanel.classList.toggle('expanded');
+    }
+
+    // Click handler for grid zoom
+    mainFeed.addEventListener("click", function(event) {
+      const rect = mainFeed.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const clickY = event.clientY - rect.top;
+
+      const ratioX = actualWidth / rect.width;
+      const ratioY = actualHeight / rect.height;
+
+      const realX = clickX * ratioX;
+      const realY = clickY * ratioY;
+
+      const cellW = actualWidth / gridCols;
+      const cellH = actualHeight / gridRows;
+
+      const col = Math.floor(realX / cellW);
+      const row = Math.floor(realY / cellH);
+
+      // Update current position
+      currentRow = row;
+      currentCol = col;
+
+      gsap.to(mainFeed, { scale: 0.98, duration: 0.1, yoyo: true, repeat: 1 });
+
+      setZoomCell(row, col);
+    });
+
+    // Set zoom cell and open modal
+    function setZoomCell(row, col) {
+      fetch(`/set_zoom?row=${row}&col=${col}`)
+        .then(response => {
+          updateCellInfo(row, col);
+          modal.style.display = "block";
+          setTimeout(() => modal.classList.add("show"), 10);
+          updateNavigationButtons();
+        })
+        .catch(error => {
+          console.error("Error setting zoom cell:", error);
+        });
+    }
+
+    // Update cell information display
+    function updateCellInfo(row, col) {
+      cellInfo.textContent = `Cell: Row ${row}, Col ${col}`;
+    }
+
+    // Update navigation button states
+    function updateNavigationButtons() {
+      const totalCells = gridRows * gridCols;
+      const currentIndex = currentRow * gridCols + currentCol;
+
+      prevCell.disabled = currentIndex === 0;
+      nextCell.disabled = currentIndex === totalCells - 1;
+    }
+
+    // Navigation functions
+    function navigateToPrevious() {
+      const currentIndex = currentRow * gridCols + currentCol;
+      if (currentIndex > 0) {
+        const newIndex = currentIndex - 1;
+        currentRow = Math.floor(newIndex / gridCols);
+        currentCol = newIndex % gridCols;
+        setZoomCell(currentRow, currentCol);
+      }
+    }
+
+    function navigateToNext() {
+      const currentIndex = currentRow * gridCols + currentCol;
+      const totalCells = gridRows * gridCols;
+      if (currentIndex < totalCells - 1) {
+        const newIndex = currentIndex + 1;
+        currentRow = Math.floor(newIndex / gridCols);
+        currentCol = newIndex % gridCols;
+        setZoomCell(currentRow, currentCol);
+      }
+    }
+
+    function toggleGrid() {
+      gridVisible = !gridVisible;
+      if (gridVisible) {
+        gridOverlay.classList.add('active');
+        gridToggle.querySelector('.bi').className = 'bi bi-grid-fill';
+      } else {
+        gridOverlay.classList.remove('active');
+        gridToggle.querySelector('.bi').className = 'bi bi-grid-3x3';
+      }
+    }
+
+    function zoomImage(direction) {
+      const scaleStep = 0.1;
+      if (direction === 'in' && zoomLevel < 3) {
+        zoomLevel += scaleStep;
+      } else if (direction === 'out' && zoomLevel > 0.5) {
+        zoomLevel -= scaleStep;
+      }
+      zoomedImg.style.transform = `scale(${zoomLevel})`;
+    }
+
+    // Modal close handlers
+    modalClose.onclick = closeModal;
+    window.onclick = function(event) {
+      if (event.target === modal) closeModal();
+    };
+
+    // Navigation event listeners
+    prevCell.addEventListener('click', navigateToPrevious);
+    nextCell.addEventListener('click', navigateToNext);
+    gridToggle.addEventListener('click', toggleGrid);
+    zoomIn.addEventListener('click', () => zoomImage('in'));
+    zoomOut.addEventListener('click', () => zoomImage('out'));
+    zoomInBottom.addEventListener('click', () => zoomImage('in'));
+    zoomOutBottom.addEventListener('click', () => zoomImage('out'));
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(event) {
+      if (modal.style.display === 'block') {
+        switch(event.key) {
+          case 'ArrowLeft':
+            event.preventDefault();
+            navigateToPrevious();
+            break;
+          case 'ArrowRight':
+            event.preventDefault();
+            navigateToNext();
+            break;
+          case 'Escape':
+            event.preventDefault();
+            closeModal();
+            break;
+          case '+':
+          case '=':
+            event.preventDefault();
+            zoomImage('in');
+            break;
+          case '-':
+            event.preventDefault();
+            zoomImage('out');
+            break;
+          case 'g':
+          case 'G':
+            event.preventDefault();
+            toggleGrid();
+            break;
+        }
+      }
+    });
+
+    function closeModal() {
+      modal.classList.remove("show");
+      setTimeout(() => {
+        modal.style.display = "none";
+        // Reset zoom state
+        fetch(`/set_zoom?row=-1&col=-1`);
+        zoomLevel = 1;
+        gridVisible = false;
+        zoomedImg.style.transform = 'scale(1)';
+        gridOverlay.classList.remove('active');
+      }, 300);
+    }
+
+    // Track heatmap state
+    let heatmapEnabled = false;
+
+    // On page load, fetch current heatmap state from backend
+    window.addEventListener('DOMContentLoaded', () => {
+      fetch('/camera_stats')
+        .then(res => res.json())
+        .then(stats => {
+          if (stats.heatmap_enabled !== undefined) {
+            heatmapEnabled = stats.heatmap_enabled;
+            updateHeatmapBtn();
+          }
+        })
+        .catch(() => {}); // ignore errors
+    });
+
+    function updateHeatmapBtn() {
+      const btn = document.getElementById('heatmapBtn');
+      const text = document.getElementById('heatmapBtnText');
+      const icon = btn.querySelector('.bi');
+
+      // Remove loading and success states
+      btn.classList.remove('loading', 'success');
+
+      if (heatmapEnabled) {
+        btn.classList.add('enabled');
+        btn.classList.remove('btn-primary');
+        text.textContent = "Disable Heat Map";
+        icon.className = "bi bi-thermometer-high me-1";
+      } else {
+        btn.classList.remove('enabled');
+        btn.classList.add('btn-primary');
+        text.textContent = "Enable Heat Map";
+        icon.className = "bi bi-thermometer-half me-1";
+      }
+    }
+
+    // Toggle heatmap with enhanced visual feedback
+    function toggleHeatmap() {
+      const btn = document.getElementById('heatmapBtn');
+
+      // Add loading state
+      btn.classList.add('loading');
+      gsap.to(btn, { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
+
+      showLoading();
+      fetch('/toggle_heatmap')
+        .then(() => {
+          heatmapEnabled = !heatmapEnabled;
+          updateHeatmapBtn();
+
+          // Add success feedback
+          setTimeout(() => {
+            btn.classList.add('success');
+            setTimeout(() => {
+              btn.classList.remove('success');
+            }, 600);
+          }, 100);
+
+          // Reload the video feed to reflect changes
+          mainImage.src = "{{ url_for('video_feed') }}" + "?t=" + Date.now();
+        })
+        .catch(() => {
+          // Remove loading state and show error
+          btn.classList.remove('loading');
+          showError();
+        });
+    }
+
+    // Uptime counter
+    let startTime = Date.now();
+    function startUptimeCounter() {
+      setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const minutes = Math.floor(elapsed / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        document.getElementById('uptime').textContent = 
+          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    // Update stats dynamically from backend with enhanced visuals
+    function updateStats() {
+      const update = () => {
+        fetch('/camera_stats')
+          .then(response => response.json())
+          .then(stats => {
+            // Update basic stats
+            document.getElementById('peopleCount').textContent = stats.people_count;
+            document.getElementById('densityLevel').textContent = stats.density_level;
+            document.getElementById('alertStatus').textContent = stats.alert_status;
+
+            // Enhanced visual updates
+            updateStatVisuals(stats);
+
+            // Check for alerts
+            checkForAlerts(stats);
+          })
+          .catch(error => {
+            console.error('Error fetching stats:', error);
+          });
+      };
+      update(); // Update immediately
+      setInterval(update, 1000); // Update every second for real-time data
+    }
+
+    // Enhanced stat visuals with progress bars and color coding
+    function updateStatVisuals(stats) {
+      const peopleCount = parseInt(stats.people_count) || 0;
+      const densityLevel = parseFloat(stats.density_level) || 0;
+      const alertStatus = stats.alert_status.toLowerCase();
+
+      // People count progress (assuming max 50 people for visualization)
+      const peopleProgress = Math.min((peopleCount / 50) * 100, 100);
+      document.getElementById('peopleProgress').style.width = peopleProgress + '%';
+
+      // Density level progress (assuming 0-100 scale)
+      const densityProgress = Math.min(densityLevel, 100);
+      document.getElementById('densityProgress').style.width = densityProgress + '%';
+
+      // Alert status progress and color coding
+      let alertProgress = 0;
+      let statusClass = 'normal';
+
+      if (alertStatus.includes('normal') || alertStatus.includes('safe')) {
+        alertProgress = 25;
+        statusClass = 'normal';
+      } else if (alertStatus.includes('warning') || alertStatus.includes('moderate')) {
+        alertProgress = 60;
+        statusClass = 'warning';
+      } else if (alertStatus.includes('alert') || alertStatus.includes('high') || alertStatus.includes('critical')) {
+        alertProgress = 90;
+        statusClass = 'alert';
+      }
+
+      document.getElementById('alertProgress').style.width = alertProgress + '%';
+
+      // Apply color classes to stat items
+      const statItems = ['peopleStat', 'densityStat', 'alertStat', 'uptimeStat'];
+      statItems.forEach(id => {
+        const element = document.getElementById(id);
+        element.classList.remove('normal', 'warning', 'alert');
+        if (id === 'alertStat') {
+          element.classList.add(statusClass);
+        }
+      });
+
+      // Update status badge
+      const statusBadge = document.getElementById('statusBadge');
+      statusBadge.className = 'status-badge ' + statusClass;
+    }
+
+    // Video feed loading and error handling
+    function showLoading() {
+      loadingOverlay.style.display = 'flex';
+      errorOverlay.style.display = 'none';
+      mainImage.style.display = 'none';
+    }
+
+    function showError() {
+      loadingOverlay.style.display = 'none';
+      errorOverlay.style.display = 'flex';
+      mainImage.style.display = 'none';
+    }
+
+    function showFeed() {
+      loadingOverlay.style.display = 'none';
+      errorOverlay.style.display = 'none';
+      mainImage.style.display = 'block';
+    }
+
+    function retryFeed() {
+      showLoading();
+      mainImage.src = "{{ url_for('video_feed') }}" + "?t=" + Date.now();
+    }
+
+    // Initialize image event listeners
+    mainImage.addEventListener('load', () => {
+      showFeed();
+    });
+
+    mainImage.addEventListener('error', () => {
+      showError();
+    });
+
+    // Start with loading state
+    showLoading();
+
+    // Dark mode functionality
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const html = document.documentElement;
+
+    // Check for saved theme preference or default to dark mode
+    const currentTheme = localStorage.getItem('theme') || 'dark';
+    html.setAttribute('data-theme', currentTheme);
+    updateThemeIcon(currentTheme);
+
+    function updateThemeIcon(theme) {
+      themeIcon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    }
+
+    function toggleTheme() {
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+
+      // Add smooth transition effect
+      gsap.to(themeToggle, { scale: 0.9, duration: 0.1, yoyo: true, repeat: 1 });
+    }
+
+    themeToggle.addEventListener('click', toggleTheme);
+
+    // Toast Notification System
+    let notificationCount = 0;
+    const toastContainer = document.getElementById('toastContainer');
+    const notificationBadge = document.getElementById('notificationBadge');
+
+    function showToast(type, title, message, duration = 5000) {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+
+      const icons = {
+        success: 'bi-check-circle-fill',
+        warning: 'bi-exclamation-triangle-fill',
+        error: 'bi-x-circle-fill',
+        info: 'bi-info-circle-fill'
+      };
+
+      toast.innerHTML = `
+        <div class="toast-icon">
+          <i class="bi ${icons[type] || icons.info}"></i>
+        </div>
+        <div class="toast-content">
+          <div class="toast-title">${title}</div>
+          <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="dismissToast(this)">
+          <i class="bi bi-x"></i>
+        </button>
+      `;
+
+      toastContainer.appendChild(toast);
+
+      // Show notification badge
+      notificationCount++;
+      updateNotificationBadge();
+
+      // Animate in
+      setTimeout(() => toast.classList.add('show'), 10);
+
+      // Auto dismiss
+      if (duration > 0) {
+        setTimeout(() => dismissToast(toast.querySelector('.toast-close')), duration);
+      }
+
+      return toast;
+    }
+
+    function dismissToast(closeBtn) {
+      const toast = closeBtn.closest('.toast');
+      toast.classList.remove('show');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+          notificationCount = Math.max(0, notificationCount - 1);
+          updateNotificationBadge();
+        }
+      }, 300);
+    }
+
+    function updateNotificationBadge() {
+      if (notificationCount > 0) {
+        notificationBadge.textContent = notificationCount > 9 ? '9+' : notificationCount;
+        notificationBadge.classList.add('show');
+      } else {
+        notificationBadge.classList.remove('show');
+      }
+    }
+
+    // Clear all notifications
+    function clearAllNotifications() {
+      const toasts = toastContainer.querySelectorAll('.toast');
+      toasts.forEach(toast => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      });
+      notificationCount = 0;
+      updateNotificationBadge();
+    }
+
+    // Demo notifications (remove in production)
+    setTimeout(() => {
+      showToast('info', 'System Online', 'Live camera feed is active and monitoring.');
+    }, 2000);
+
+    // Alert system integration with stats
+    let lastAlertStatus = '';
+    function checkForAlerts(stats) {
+      const currentStatus = stats.alert_status.toLowerCase();
+
+      if (currentStatus !== lastAlertStatus) {
+        if (currentStatus.includes('critical')) {
+          console.log('high crowd density!!');
+          alert('high crowd density!!');
+          showToast('error', 'Critical Alert', `Detected ${stats.people_count} people. Immediate attention required.`, 8000);
+        } else if (currentStatus.includes('alert') || currentStatus.includes('high')) {
+          showToast('error', 'High Crowd Density Alert', `Detected ${stats.people_count} people. Immediate attention required.`, 8000);
+        } else if (currentStatus.includes('warning') || currentStatus.includes('moderate')) {
+          showToast('warning', 'Crowd Density Warning', `Detected ${stats.people_count} people. Monitor closely.`, 6000);
+        } else if (currentStatus.includes('normal') || currentStatus.includes('safe')) {
+          showToast('success', 'Normal Conditions', 'Crowd density is within safe limits.', 4000);
+        }
+        lastAlertStatus = currentStatus;
+      }
+    }
+  </script>
+</body>
+</html>

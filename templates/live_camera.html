@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Camera | Crowd Management System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #edf6ff 0%, #e6f2ff 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #333;
+      min-height: 100vh;
+      padding-top: 80px;
+    }
+
+    .navbar-brand {
+      font-weight: 600;
+    }
+
+    .camera-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .camera-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 8px 32px rgba(0, 123, 255, 0.1);
+      margin-bottom: 2rem;
+    }
+
+    .video-container {
+      position: relative;
+      background: #000;
+      border-radius: 15px;
+      overflow: hidden;
+      margin-bottom: 2rem;
+      min-height: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #cameraStream {
+      width: 100%;
+      height: auto;
+      max-height: 600px;
+      object-fit: contain;
+    }
+
+    .camera-status {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .live-indicator::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #28a745;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      transition: transform 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #007bff;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .controls-section {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    .control-btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+    }
+
+    .btn-stop {
+      background: linear-gradient(135deg, #dc3545, #c82333);
+      color: white;
+    }
+
+    .btn-heatmap {
+      background: linear-gradient(135deg, #ffc107, #fd7e14);
+      color: white;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 1rem;
+      border-radius: 10px;
+      margin: 1rem 0;
+      text-align: center;
+    }
+
+    .loading-spinner {
+      display: none;
+      text-align: center;
+      color: #007bff;
+    }
+
+    @media (max-width: 768px) {
+      .camera-container {
+        padding: 1rem;
+      }
+      .controls-section {
+        flex-direction: column;
+        align-items: center;
+      }
+      .control-btn {
+        width: 100%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm fixed-top">
+    <div class="container">
+      <a class="navbar-brand fs-4" href="/">Crowd Management System</a>
+      <div class="navbar-nav ms-auto">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/live_preview">Uploaded Video</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="camera-container">
+    <div class="camera-card">
+      <h1 class="text-center mb-4 text-primary">
+        <i class="bi bi-camera-video me-2"></i>Live Camera Analysis
+      </h1>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number" id="peopleCount">0</span>
+          <span class="stat-label">People Detected</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="densityLevel">Low</span>
+          <span class="stat-label">Crowd Density</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="alertStatus">Safe</span>
+          <span class="stat-label">Safety Status</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="fps">0</span>
+          <span class="stat-label">FPS</span>
+        </div>
+      </div>
+
+      <!-- Video Container -->
+      <div class="video-container">
+        <div class="camera-status">
+          <div class="live-indicator" id="cameraStatus">
+            <span>Camera Off</span>
+          </div>
+        </div>
+        <img id="cameraStream" src="" alt="Camera Stream" style="display: none;" />
+        <div id="cameraPlaceholder" class="text-center text-white">
+          <i class="bi bi-camera-video" style="font-size: 4rem; opacity: 0.5;"></i>
+          <p class="mt-3" style="opacity: 0.7;">Click "Start Camera" to begin live analysis</p>
+        </div>
+        <div class="loading-spinner" id="loadingSpinner">
+          <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+          <p class="mt-2">Initializing camera...</p>
+        </div>
+      </div>
+
+      <!-- Area Input -->
+      <div class="mb-3 text-center">
+        <label for="areaInput" class="form-label fw-bold">Camera Coverage Area (sqm)</label>
+        <input type="number" class="form-control d-inline-block w-auto" id="areaInput" placeholder="e.g., 50" min="0.1" step="0.1" value="50">
+        <small class="form-text text-muted">Enter the physical area in square meters covered by the camera view</small>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls-section">
+        <button class="control-btn btn-start" id="startCameraBtn">
+          <i class="bi bi-play-fill me-2"></i>Start Camera
+        </button>
+        <button class="control-btn btn-stop" id="stopCameraBtn" disabled>
+          <i class="bi bi-stop-fill me-2"></i>Stop Camera
+        </button>
+        <button class="control-btn btn-heatmap" id="toggleHeatmapBtn" disabled>
+          <i class="bi bi-thermometer-half me-2"></i>Toggle Heatmap
+        </button>
+        <button class="control-btn btn-secondary" onclick="window.location.href='/'">
+          <i class="bi bi-house me-2"></i>Back to Dashboard
+        </button>
+      </div>
+
+      <div id="errorMessage" class="error-message" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script>
+    let isStreamActive = false;
+    let heatmapEnabled = false;
+    let previousAlertStatus = 'Safe';
+
+    const cameraStream = document.getElementById('cameraStream');
+    const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const cameraStatus = document.getElementById('cameraStatus');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    const startBtn = document.getElementById('startCameraBtn');
+    const stopBtn = document.getElementById('stopCameraBtn');
+    const heatmapBtn = document.getElementById('toggleHeatmapBtn');
+
+    // Start camera
+    startBtn.addEventListener('click', async () => {
+      try {
+        showLoading(true);
+        hideError();
+
+        // Get area value
+        const area = parseFloat(document.getElementById('areaInput').value);
+        if (!area || area <= 0) {
+          throw new Error('Please enter a valid area in square meters');
+        }
+
+        // Start camera stream on backend with area
+        const response = await fetch('/start_camera', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ area_sqm: area })
+        });
+        if (!response.ok) {
+          throw new Error('Failed to start camera');
+        }
+        
+        // Start streaming
+        cameraStream.src = `/camera_feed?t=${Date.now()}`;
+        cameraStream.style.display = 'block';
+        cameraPlaceholder.style.display = 'none';
+        
+        isStreamActive = true;
+        updateCameraStatus('LIVE - Camera Active');
+        updateControlButtons();
+        startStatsUpdate();
+        
+        showLoading(false);
+        
+      } catch (error) {
+        console.error('Error starting camera:', error);
+        showError('Failed to start camera. Please check camera permissions and try again.');
+        showLoading(false);
+      }
+    });
+
+    // Stop camera
+    stopBtn.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/stop_camera', { method: 'POST' });
+        
+        cameraStream.style.display = 'none';
+        cameraPlaceholder.style.display = 'block';
+        
+        isStreamActive = false;
+        updateCameraStatus('Camera Off');
+        updateControlButtons();
+        
+        // Reset stats
+        document.getElementById('peopleCount').textContent = '0';
+        document.getElementById('densityLevel').textContent = 'Low';
+        document.getElementById('alertStatus').textContent = 'Safe';
+        document.getElementById('fps').textContent = '0';
+        
+      } catch (error) {
+        console.error('Error stopping camera:', error);
+        showError('Failed to stop camera.');
+      }
+    });
+
+    // Toggle heatmap
+    heatmapBtn.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/toggle_camera_heatmap', { method: 'POST' });
+        if (response.ok) {
+          heatmapEnabled = !heatmapEnabled;
+          heatmapBtn.innerHTML = `<i class="bi bi-thermometer-half me-2"></i>${heatmapEnabled ? 'Disable' : 'Enable'} Heatmap`;
+        }
+      } catch (error) {
+        console.error('Error toggling heatmap:', error);
+      }
+    });
+
+    function updateCameraStatus(status) {
+      if (status.includes('LIVE')) {
+        cameraStatus.innerHTML = '<span>LIVE - Camera Active</span>';
+        cameraStatus.className = 'live-indicator';
+      } else {
+        cameraStatus.innerHTML = '<span>Camera Off</span>';
+        cameraStatus.className = '';
+      }
+    }
+
+    function updateControlButtons() {
+      startBtn.disabled = isStreamActive;
+      stopBtn.disabled = !isStreamActive;
+      heatmapBtn.disabled = !isStreamActive;
+    }
+
+    function showLoading(show) {
+      loadingSpinner.style.display = show ? 'block' : 'none';
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.style.display = 'block';
+    }
+
+    function hideError() {
+      errorMessage.style.display = 'none';
+    }
+
+    // Update stats from backend
+    function startStatsUpdate() {
+      if (!isStreamActive) return;
+      
+      setInterval(async () => {
+        if (!isStreamActive) return;
+        
+        try {
+          const response = await fetch('/camera_stats');
+          if (response.ok) {
+            const stats = await response.json();
+            
+            // Animate stat updates
+            animateStatUpdate('peopleCount', stats.people_count || 0);
+            animateStatUpdate('densityLevel', stats.density_level || 'Low');
+            animateStatUpdate('alertStatus', stats.alert_status || 'Safe');
+            animateStatUpdate('fps', Math.round(stats.fps || 0));
+          }
+        } catch (error) {
+          console.error('Error fetching stats:', error);
+        }
+      }, 1000);
+    }
+
+    function animateStatUpdate(elementId, newValue) {
+      const element = document.getElementById(elementId);
+      gsap.to(element, {
+        scale: 1.1,
+        duration: 0.1,
+        yoyo: true,
+        repeat: 1,
+        onComplete: () => {
+          element.textContent = newValue;
+          if (elementId === 'alertStatus') {
+            if (newValue === 'Critical Alert' && previousAlertStatus !== 'Critical Alert') {
+              console.log('high crowd density!!');
+              alert('high crowd density!!');
+            }
+            previousAlertStatus = newValue;
+            if (newValue === 'Critical Alert' || newValue === 'Warning') {
+              element.style.color = '#dc3545';
+            } else if (newValue === 'Caution') {
+              element.style.color = '#ffc107';
+            } else {
+              element.style.color = '#007bff';
+            }
+          }
+        }
+      });
+    }
+
+    // Initialize page
+    window.addEventListener('DOMContentLoaded', () => {
+      gsap.from('.camera-card', {
+        opacity: 0,
+        y: 30,
+        duration: 0.8,
+        ease: "power2.out"
+      });
+      
+      gsap.from('.stat-card', {
+        opacity: 0,
+        y: 20,
+        duration: 0.6,
+        stagger: 0.1,
+        delay: 0.3,
+        ease: "power2.out"
+      });
+      
+      updateControlButtons();
+    });
+  </script>
+</body>
+</html>
