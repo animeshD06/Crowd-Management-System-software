@@ -1,0 +1,16 @@
+torch
+torchvision
+torchaudio
+ultralytics
+opencv-python==4.7.0.72  # Compatible version to avoid cv2.dnn.DictValue issue
+numpy<2.0  # Pin to avoid NumPy 2.x compatibility issues
+matplotlib
+fastapi
+uvicorn
+jinja2
+python-multipart  # Required for handling file uploads in FastAPI
+deep_sort_realtime
+setuptools
+scikit-learn
+timm
+scikit-image
