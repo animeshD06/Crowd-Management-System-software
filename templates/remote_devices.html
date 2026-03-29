@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Devices</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      background: linear-gradient(160deg, #07111d, #0b1527 60%, #0d223d);
+      color: #eef5ff;
+    }
+    .shell {
+      width: min(1320px, calc(100vw - 28px));
+      margin: 14px auto;
+      padding: 18px;
+      border-radius: 26px;
+      border: 1px solid rgba(173, 211, 255, 0.14);
+      background: rgba(6, 13, 24, 0.64);
+      backdrop-filter: blur(16px);
+    }
+    .hero, .panel, .device-card {
+      border-radius: 22px;
+      border: 1px solid rgba(173, 211, 255, 0.14);
+      background: rgba(14, 26, 46, 0.82);
+    }
+    .hero {
+      padding: 22px 24px;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, rgba(122,162,255,0.18), rgba(78,205,196,0.12)), rgba(14, 26, 46, 0.96);
+    }
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: #4ecdc4;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      margin-bottom: 14px;
+    }
+    h1, h2, h3 { font-family: "Space Grotesk", sans-serif; margin: 0; }
+    .hero p, .muted { color: #92aac8; }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(340px, 0.95fr) minmax(0, 1.25fr);
+      gap: 16px;
+    }
+    .panel { padding: 18px; }
+    .field { display: grid; gap: 8px; margin-bottom: 12px; }
+    label { color: #92aac8; font-size: 13px; }
+    .input, .select, .textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: #eef5ff;
+      padding: 12px 14px;
+      outline: none;
+    }
+    .textarea { min-height: 92px; resize: vertical; }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .btnx {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      color: white;
+      background: linear-gradient(135deg, #7aa2ff, #5573ff);
+    }
+    .btnx.secondary { background: rgba(255,255,255,0.08); color: #eef5ff; }
+    .device-list {
+      display: grid;
+      gap: 12px;
+    }
+    .device-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .device-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: #cfe2ff;
+      font-size: 12px;
+    }
+    .device-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .hint {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(78,205,196,0.08);
+      color: #dffaf7;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow"><i class="bi bi-router"></i> Remote Device Hub</div>
+      <h1>Connect CCTV, IP cameras, and permission-based mobile cameras</h1>
+      <p>Register fixed CCTV or RTSP feeds once, or generate a mobile broadcaster link for a person who explicitly grants camera access from their phone. Use the saved device ID on the live monitoring page.</p>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2 style="margin-bottom: 12px;">Add Device</h2>
+        <div class="field">
+          <label for="deviceName">Device name</label>
+          <input id="deviceName" class="input" placeholder="Gate CCTV, Hallway Cam, Volunteer Phone">
+        </div>
+        <div class="field">
+          <label for="deviceType">Device type</label>
+          <select id="deviceType" class="select">
+            <option value="cctv">CCTV / RTSP camera</option>
+            <option value="ip">IP / MJPEG camera</option>
+            <option value="mobile">Mobile camera with permission</option>
+          </select>
+        </div>
+        <div class="field" id="sourceField">
+          <label for="deviceSource">Source URL</label>
+          <input id="deviceSource" class="input" placeholder="rtsp://..., http://..., or mjpeg stream URL">
+        </div>
+        <div class="field">
+          <label for="deviceNotes">Notes</label>
+          <textarea id="deviceNotes" class="textarea" placeholder="Optional location, owner, or instructions"></textarea>
+        </div>
+        <div class="actions">
+          <button class="btnx" id="saveDeviceBtn"><i class="bi bi-plus-circle me-1"></i>Save Device</button>
+          <a class="btnx secondary" href="/live_camera" style="text-decoration:none;"><i class="bi bi-broadcast-pin me-1"></i>Open Live Monitor</a>
+          <a class="btnx secondary" href="/" style="text-decoration:none;"><i class="bi bi-house me-1"></i>Dashboard</a>
+        </div>
+        <div class="hint" id="deviceHint">For mobile cameras, saving the device generates a sharable broadcaster link. The phone owner opens it, grants access, and the stream becomes available as a remote source.</div>
+      </div>
+
+      <div class="panel">
+        <h2 style="margin-bottom: 12px;">Saved Devices</h2>
+        <div class="device-list" id="deviceList"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const els = {
+      name: document.getElementById('deviceName'),
+      type: document.getElementById('deviceType'),
+      source: document.getElementById('deviceSource'),
+      sourceField: document.getElementById('sourceField'),
+      notes: document.getElementById('deviceNotes'),
+      list: document.getElementById('deviceList'),
+      hint: document.getElementById('deviceHint'),
+      saveBtn: document.getElementById('saveDeviceBtn'),
+    };
+
+    function escapeHtml(value) {
+      return (value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+
+    function updateTypeUI() {
+      const isMobile = els.type.value === 'mobile';
+      els.sourceField.style.display = isMobile ? 'none' : 'grid';
+      els.hint.textContent = isMobile
+        ? 'Saving this device generates a mobile broadcaster link. Share it only with a person who has given permission to use their phone camera.'
+        : 'For CCTV/IP cameras, enter the RTSP, HTTP, or MJPEG source URL that OpenCV can open.';
+    }
+
+    async function fetchDevices() {
+      const res = await fetch('/api/devices');
+      const payload = await res.json();
+      renderDevices(payload.devices || []);
+    }
+
+    function renderDevices(devices) {
+      if (!devices.length) {
+        els.list.innerHTML = '<div class="muted">No remote devices saved yet.</div>';
+        return;
+      }
+      els.list.innerHTML = devices.map(device => {
+        const liveSource = device.type === 'mobile' ? `mobile:${device.id}` : device.source;
+        const mobileLink = device.type === 'mobile' ? `${window.location.origin}/mobile_camera/${device.id}` : '';
+        return `
+          <article class="device-card">
+            <div class="device-head">
+              <div>
+                <h3>${escapeHtml(device.name)}</h3>
+                <div class="chips" style="margin-top:8px;">
+                  <span class="chip"><i class="bi bi-key"></i>ID: ${escapeHtml(device.id)}</span>
+                  <span class="chip"><i class="bi bi-camera-video"></i>${escapeHtml(device.type)}</span>
+                </div>
+              </div>
+              <div class="device-actions">
+                <button class="btnx secondary" onclick="copyToClipboard('${liveSource}')">Copy Live Source</button>
+                ${device.type === 'mobile' ? `<button class="btnx secondary" onclick="copyToClipboard('${mobileLink}')">Copy Mobile Link</button>` : ''}
+                <button class="btnx secondary" onclick="deleteDevice('${device.id}')">Delete</button>
+              </div>
+            </div>
+            <div class="muted">${escapeHtml(device.notes || 'No notes')}</div>
+            <div class="hint">${device.type === 'mobile'
+              ? `Mobile broadcaster: <strong>${escapeHtml(mobileLink)}</strong><br>Use source <strong>mobile:${escapeHtml(device.id)}</strong> on the live page or simply enter the device ID <strong>${escapeHtml(device.id)}</strong>.`
+              : `Camera source: <strong>${escapeHtml(device.source)}</strong><br>Use source URL directly or enter device ID <strong>${escapeHtml(device.id)}</strong> on the live page.`}</div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function saveDevice() {
+      const payload = {
+        name: els.name.value.trim(),
+        type: els.type.value,
+        source: els.source.value.trim(),
+        notes: els.notes.value.trim(),
+      };
+      const res = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert(result.detail || 'Could not save device');
+        return;
+      }
+      els.name.value = '';
+      els.source.value = '';
+      els.notes.value = '';
+      updateTypeUI();
+      fetchDevices();
+      if (result.mobile_url) {
+        alert(`Mobile device saved.\nOpen this link on the phone:\n${window.location.origin}${result.mobile_url}\n\nLive source ID: ${result.device.id}`);
+      }
+    }
+
+    async function deleteDevice(deviceId) {
+      await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
+      fetchDevices();
+    }
+
+    async function copyToClipboard(text) {
+      await navigator.clipboard.writeText(text);
+      alert(`Copied:\n${text}`);
+    }
+
+    window.deleteDevice = deleteDevice;
+    window.copyToClipboard = copyToClipboard;
+
+    els.type.addEventListener('change', updateTypeUI);
+    els.saveBtn.addEventListener('click', saveDevice);
+
+    updateTypeUI();
+    fetchDevices();
+  </script>
+</body>
+</html>

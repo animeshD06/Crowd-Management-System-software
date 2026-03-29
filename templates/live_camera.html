@@ -210,6 +210,10 @@
           <span class="stat-label">People Detected</span>
         </div>
         <div class="stat-card">
+          <span class="stat-number" id="densityValue">0.000</span>
+          <span class="stat-label">Persons / sqm</span>
+        </div>
+        <div class="stat-card">
           <span class="stat-number" id="densityLevel">Low</span>
           <span class="stat-label">Crowd Density</span>
         </div>
@@ -248,6 +252,12 @@
         <small class="form-text text-muted">Enter the physical area in square meters covered by the camera view</small>
       </div>
 
+      <div class="mb-4 text-center">
+        <label for="sourceInput" class="form-label fw-bold">Camera Source</label>
+        <input type="text" class="form-control d-inline-block w-auto" id="sourceInput" placeholder="0, 1, rtsp://..., http://...">
+        <small class="form-text text-muted">Use a webcam index like `0` or a remote IP/RTSP stream URL.</small>
+      </div>
+
       <!-- Controls -->
       <div class="controls-section">
         <button class="control-btn btn-start" id="startCameraBtn">
@@ -272,6 +282,7 @@
     let isStreamActive = false;
     let heatmapEnabled = false;
     let previousAlertStatus = 'Safe';
+    let statsIntervalId = null;
 
     const cameraStream = document.getElementById('cameraStream');
     const cameraPlaceholder = document.getElementById('cameraPlaceholder');
@@ -291,6 +302,7 @@
 
         // Get area value
         const area = parseFloat(document.getElementById('areaInput').value);
+        const source = document.getElementById('sourceInput').value.trim();
         if (!area || area <= 0) {
           throw new Error('Please enter a valid area in square meters');
         }
@@ -301,7 +313,7 @@
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ area_sqm: area })
+          body: JSON.stringify({ area_sqm: area, source: source || 0 })
         });
         if (!response.ok) {
           throw new Error('Failed to start camera');
@@ -340,9 +352,14 @@
         
         // Reset stats
         document.getElementById('peopleCount').textContent = '0';
+        document.getElementById('densityValue').textContent = '0.000';
         document.getElementById('densityLevel').textContent = 'Low';
         document.getElementById('alertStatus').textContent = 'Safe';
         document.getElementById('fps').textContent = '0';
+        if (statsIntervalId) {
+          clearInterval(statsIntervalId);
+          statsIntervalId = null;
+        }
         
       } catch (error) {
         console.error('Error stopping camera:', error);
@@ -395,8 +412,11 @@
     // Update stats from backend
     function startStatsUpdate() {
       if (!isStreamActive) return;
-      
-      setInterval(async () => {
+      if (statsIntervalId) {
+        clearInterval(statsIntervalId);
+      }
+
+      statsIntervalId = setInterval(async () => {
         if (!isStreamActive) return;
         
         try {
@@ -406,9 +426,12 @@
             
             // Animate stat updates
             animateStatUpdate('peopleCount', stats.people_count || 0);
+            animateStatUpdate('densityValue', Number(stats.density || 0).toFixed(3));
             animateStatUpdate('densityLevel', stats.density_level || 'Low');
             animateStatUpdate('alertStatus', stats.alert_status || 'Safe');
             animateStatUpdate('fps', Math.round(stats.fps || 0));
+            heatmapEnabled = Boolean(stats.heatmap_enabled);
+            heatmapBtn.innerHTML = `<i class="bi bi-thermometer-half me-2"></i>${heatmapEnabled ? 'Disable' : 'Enable'} Heatmap`;
           }
         } catch (error) {
           console.error('Error fetching stats:', error);

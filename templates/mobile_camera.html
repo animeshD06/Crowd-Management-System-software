@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mobile Camera Broadcaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      background: linear-gradient(160deg, #06101b, #0a1526 60%, #0f2644);
+      color: #eef5ff;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+    }
+    .card {
+      width: min(720px, 100%);
+      border-radius: 24px;
+      border: 1px solid rgba(173,211,255,0.14);
+      background: rgba(12, 24, 42, 0.88);
+      padding: 22px;
+      box-shadow: 0 28px 70px rgba(0,0,0,0.34);
+    }
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: #4ecdc4;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    h1 { font-family: "Space Grotesk", sans-serif; margin: 14px 0 10px; }
+    p { color: #92aac8; }
+    video {
+      width: 100%;
+      border-radius: 18px;
+      background: #02060c;
+      margin-top: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+      background: linear-gradient(135deg, #7aa2ff, #5573ff);
+    }
+    button.secondary { background: rgba(255,255,255,0.08); }
+    .status {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      color: #d8e6fb;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="eyebrow">Permission-Based Mobile Camera</div>
+    <h1>{{ device.name }}</h1>
+    <p>This page uses the phone camera only after the owner grants permission. Once started, frames are streamed to the server for live monitoring. Device ID: <strong>{{ device.id }}</strong></p>
+    <video id="preview" autoplay muted playsinline></video>
+    <div class="actions">
+      <button id="startBtn">Start Camera Sharing</button>
+      <button id="stopBtn" class="secondary" disabled>Stop Sharing</button>
+    </div>
+    <div class="status" id="statusBox">Waiting to start.</div>
+  </main>
+
+  <script>
+    const deviceId = "{{ device.id }}";
+    const preview = document.getElementById('preview');
+    const statusBox = document.getElementById('statusBox');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    let stream = null;
+    let timer = null;
+    let canvas = document.createElement('canvas');
+
+    function setStatus(message) {
+      statusBox.textContent = message;
+    }
+
+    async function sendFrame() {
+      if (!stream) return;
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      canvas.width = settings.width || 640;
+      canvas.height = settings.height || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+      const form = new FormData();
+      form.append('frame', blob, 'frame.jpg');
+      await fetch(`/api/mobile_frame/${deviceId}`, { method: 'POST', body: form });
+    }
+
+    async function startStreaming() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        preview.srcObject = stream;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus('Camera active. Sending frames...');
+        await sendFrame();
+        timer = setInterval(sendFrame, 350);
+      } catch (error) {
+        setStatus(`Camera permission or access failed: ${error.message}`);
+      }
+    }
+
+    function stopStreaming() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      stream = null;
+      preview.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus('Camera sharing stopped.');
+    }
+
+    startBtn.addEventListener('click', startStreaming);
+    stopBtn.addEventListener('click', stopStreaming);
+  </script>
+</body>
+</html>

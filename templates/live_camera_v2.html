@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(11, 24, 45, 0.82);
+      --panel-strong: rgba(16, 36, 67, 0.95);
+      --line: rgba(175, 209, 255, 0.14);
+      --text: #ecf4ff;
+      --muted: #92aac8;
+      --accent: #4ecdc4;
+      --accent-2: #7aa2ff;
+      --warn: #ffb84d;
+      --danger: #ff6577;
+      --success: #4ad295;
+      --shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "IBM Plex Sans", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(122, 162, 255, 0.20), transparent 28%),
+        radial-gradient(circle at top right, rgba(78, 205, 196, 0.16), transparent 24%),
+        linear-gradient(160deg, #050b14, #08111f 55%, #0b1b31);
+      min-height: 100vh;
+    }
+    .shell {
+      width: min(1440px, calc(100vw - 32px));
+      margin: 16px auto;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: rgba(4, 10, 20, 0.55);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .topbar, .stats-grid, .layout, .control-grid { display: grid; gap: 16px; }
+    .topbar {
+      grid-template-columns: 1.5fr 1fr;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+    .hero, .status-strip, .panel, .stat, .feed-shell, .snapshot-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+    }
+    .hero {
+      padding: 22px 24px;
+      background:
+        linear-gradient(135deg, rgba(122, 162, 255, 0.18), rgba(78, 205, 196, 0.10)),
+        var(--panel-strong);
+    }
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    h1, h2, h3, h4 { font-family: "Space Grotesk", sans-serif; margin: 0; }
+    .hero h1 { font-size: clamp(2rem, 3vw, 3rem); margin-bottom: 10px; }
+    .hero p { color: var(--muted); max-width: 760px; margin: 0; }
+    .status-strip {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      align-content: center;
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      width: fit-content;
+      background: rgba(255,255,255,0.04);
+    }
+    .pulse {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 0 rgba(255, 101, 119, 0.7);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 101, 119, 0.7); }
+      70% { box-shadow: 0 0 0 16px rgba(255, 101, 119, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 101, 119, 0); }
+    }
+    .status-mini {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .status-mini strong { display: block; color: var(--text); font-size: 15px; margin-top: 4px; }
+    .stats-grid {
+      grid-template-columns: repeat(5, 1fr);
+      margin-bottom: 18px;
+    }
+    .stat { padding: 18px; }
+    .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+    .stat .value { font: 700 clamp(1.5rem, 2vw, 2.2rem)/1 "Space Grotesk", sans-serif; margin-top: 10px; }
+    .layout {
+      grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr);
+      align-items: start;
+    }
+    .feed-shell { padding: 18px; }
+    .feed-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .feed-stage {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #02060d;
+      border: 1px solid rgba(255,255,255,0.08);
+      min-height: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .feed-stage img {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: contain;
+      max-height: 76vh;
+    }
+    .feed-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.38));
+      text-align: center;
+      padding: 24px;
+    }
+    .sidebar { display: grid; gap: 16px; }
+    .panel { padding: 18px; }
+    .panel h3 { font-size: 1.05rem; margin-bottom: 12px; }
+    .control-grid { grid-template-columns: 1fr 1fr; }
+    .field { display: grid; gap: 8px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 13px; color: var(--muted); }
+    .input, .select {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 12px 14px;
+      outline: none;
+    }
+    .input::placeholder { color: rgba(236, 244, 255, 0.34); }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .btnx {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 600;
+      color: white;
+      background: linear-gradient(135deg, var(--accent-2), #5672ff);
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+    }
+    .btnx.secondary { background: rgba(255,255,255,0.08); color: var(--text); }
+    .btnx.success { background: linear-gradient(135deg, var(--success), #1aab72); }
+    .btnx.warn { background: linear-gradient(135deg, var(--warn), #ff8d38); }
+    .btnx.danger { background: linear-gradient(135deg, var(--danger), #df3b66); }
+    .btnx:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btnx:hover:not(:disabled) { transform: translateY(-1px); }
+    .meta-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .meta-item strong { color: var(--text); }
+    .snapshot-card img {
+      width: 100%;
+      margin-top: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      display: none;
+    }
+    .toast-stack {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      display: grid;
+      gap: 10px;
+      z-index: 1000;
+    }
+    .toastx {
+      min-width: 280px;
+      max-width: 360px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(5, 11, 21, 0.92);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .toastx strong { display: block; margin-bottom: 4px; }
+    .toastx.info strong { color: var(--accent); }
+    .toastx.warn strong { color: var(--warn); }
+    .toastx.error strong { color: var(--danger); }
+    .toastx.success strong { color: var(--success); }
+    @media (max-width: 1100px) {
+      .topbar, .layout { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 720px) {
+      .shell { width: calc(100vw - 18px); margin: 9px auto; padding: 12px; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .control-grid, .actions, .status-mini { grid-template-columns: 1fr; }
+      .feed-stage { min-height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-stack" id="toastStack"></div>
+  <main class="shell">
+    <section class="topbar">
+      <div class="hero">
+        <div class="eyebrow"><i class="bi bi-broadcast-pin"></i> Live AI Surveillance</div>
+        <h1>Modern Crowd Command Center</h1>
+        <p>Operate webcams, RTSP feeds, and IP cameras from one control surface. Switch between speed-first and accuracy-first models, monitor density live, and capture automated snapshots on crowd alerts.</p>
+      </div>
+      <div class="status-strip">
+        <div class="live-badge">
+          <span class="pulse"></span>
+          <strong id="liveStateText">Camera idle</strong>
+        </div>
+        <div class="status-mini">
+          <div>Current source<strong id="sourceLabel">Webcam 0</strong></div>
+          <div>Active model<strong id="modelLabel">YOLOv8 Nano</strong></div>
+          <div>Heat map<strong id="heatmapState">Disabled</strong></div>
+          <div>Last error<strong id="lastError">None</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat"><div class="label">People Count</div><div class="value" id="peopleCount">0</div></article>
+      <article class="stat"><div class="label">Density</div><div class="value" id="densityValue">0.000</div></article>
+      <article class="stat"><div class="label">Density Level</div><div class="value" id="densityLevel">Low</div></article>
+      <article class="stat"><div class="label">Alert Status</div><div class="value" id="alertStatus">Safe</div></article>
+      <article class="stat"><div class="label">FPS</div><div class="value" id="fps">0</div></article>
+    </section>
+
+    <section class="layout">
+      <div class="feed-shell">
+        <div class="feed-top">
+          <div>
+            <h2>Live Stream</h2>
+            <div style="color: var(--muted); font-size: 14px;">Annotated MJPEG stream with real-time crowd analytics</div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="/remote_devices" class="btnx secondary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Remote Devices</a>
+            <a href="/" class="btnx secondary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Back to Dashboard</a>
+          </div>
+        </div>
+        <div class="feed-stage">
+          <img id="cameraStream" alt="Live camera stream" style="display:none;">
+          <div class="feed-overlay" id="feedOverlay">
+            <div>
+              <i class="bi bi-camera-video-off" style="font-size: 3rem; display:block; margin-bottom: 10px;"></i>
+              Start a local or remote source to begin inference.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>Runtime Controls</h3>
+          <div class="control-grid">
+            <div class="field full">
+              <label for="cameraSource">Camera source or saved device ID</label>
+              <input id="cameraSource" class="input" placeholder="0, 1, rtsp://..., http://..., or saved device ID">
+            </div>
+            <div class="field">
+              <label for="areaInput">Coverage area (sqm)</label>
+              <input id="areaInput" type="number" min="0.1" step="0.1" value="50" class="input">
+            </div>
+            <div class="field">
+              <label for="modelSelect">Inference model</label>
+              <select id="modelSelect" class="select"></select>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btnx success" id="startBtn"><i class="bi bi-play-fill"></i> Start</button>
+            <button class="btnx danger" id="stopBtn" disabled><i class="bi bi-stop-fill"></i> Stop</button>
+            <button class="btnx warn" id="heatmapBtn" disabled><i class="bi bi-thermometer-half"></i> Toggle Heatmap</button>
+            <button class="btnx secondary" id="applyModelBtn"><i class="bi bi-cpu"></i> Apply Model</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Model Notes</h3>
+          <div class="meta-list">
+            <div class="meta-item"><span>Selected profile</span><strong id="modelProfile">Fastest / Balanced</strong></div>
+            <div class="meta-item"><span>Compute device</span><strong id="computeDevice">CPU</strong></div>
+            <div class="meta-item"><span>Recommended use</span><strong id="modelHint">Everyday monitoring</strong></div>
+          </div>
+        </div>
+
+        <div class="panel snapshot-card">
+          <h3>Latest Alert Snapshot</h3>
+          <div style="color: var(--muted); font-size: 14px;" id="snapshotHint">Snapshots appear here when density reaches alert thresholds.</div>
+          <img id="snapshotImage" alt="Latest alert snapshot">
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const els = {
+      liveStateText: document.getElementById('liveStateText'),
+      sourceLabel: document.getElementById('sourceLabel'),
+      modelLabel: document.getElementById('modelLabel'),
+      heatmapState: document.getElementById('heatmapState'),
+      lastError: document.getElementById('lastError'),
+      peopleCount: document.getElementById('peopleCount'),
+      densityValue: document.getElementById('densityValue'),
+      densityLevel: document.getElementById('densityLevel'),
+      alertStatus: document.getElementById('alertStatus'),
+      fps: document.getElementById('fps'),
+      cameraStream: document.getElementById('cameraStream'),
+      feedOverlay: document.getElementById('feedOverlay'),
+      cameraSource: document.getElementById('cameraSource'),
+      areaInput: document.getElementById('areaInput'),
+      modelSelect: document.getElementById('modelSelect'),
+      applyModelBtn: document.getElementById('applyModelBtn'),
+      startBtn: document.getElementById('startBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      heatmapBtn: document.getElementById('heatmapBtn'),
+      modelProfile: document.getElementById('modelProfile'),
+      computeDevice: document.getElementById('computeDevice'),
+      modelHint: document.getElementById('modelHint'),
+      snapshotImage: document.getElementById('snapshotImage'),
+      snapshotHint: document.getElementById('snapshotHint'),
+      toastStack: document.getElementById('toastStack'),
+    };
+
+    let poller = null;
+    let lastAlert = '';
+
+    function toast(type, title, message) {
+      const node = document.createElement('div');
+      node.className = `toastx ${type}`;
+      node.innerHTML = `<strong>${title}</strong><div>${message}</div>`;
+      els.toastStack.appendChild(node);
+      setTimeout(() => node.remove(), 4200);
+    }
+
+    function setFeedVisible(active) {
+      els.cameraStream.style.display = active ? 'block' : 'none';
+      els.feedOverlay.style.display = active ? 'none' : 'flex';
+    }
+
+    function renderModelOptions(models, currentKey) {
+      const options = Object.values(models).map(model => {
+        const selected = model.key === currentKey ? 'selected' : '';
+        return `<option value="${model.key}" ${selected}>${model.label} · ${model.speed} · ${model.accuracy}</option>`;
+      }).join('');
+      els.modelSelect.innerHTML = options;
+    }
+
+    function updateModelMeta(currentModel) {
+      els.modelLabel.textContent = currentModel.label;
+      els.modelProfile.textContent = `${currentModel.speed} / ${currentModel.accuracy}`;
+      els.computeDevice.textContent = currentModel.device.toUpperCase();
+      els.modelHint.textContent = currentModel.key === 'max' ? 'High-density scenes and best offline analysis'
+        : currentModel.key === 'accurate' ? 'Sharper accuracy without max latency'
+        : currentModel.key === 'balanced' ? 'Good live monitoring on decent hardware'
+        : 'Best responsiveness and fastest startup';
+    }
+
+    function renderState(state) {
+      const stats = state.camera_stats || {};
+      els.liveStateText.textContent = state.camera_active ? 'Camera active' : 'Camera idle';
+      els.sourceLabel.textContent = stats.source || 'Webcam 0';
+      els.heatmapState.textContent = stats.heatmap_enabled ? 'Enabled' : 'Disabled';
+      els.lastError.textContent = stats.last_error || 'None';
+      els.peopleCount.textContent = stats.people_count ?? 0;
+      els.densityValue.textContent = Number(stats.density || 0).toFixed(3);
+      els.densityLevel.textContent = stats.density_level || 'Low';
+      els.alertStatus.textContent = stats.alert_status || 'Safe';
+      els.fps.textContent = Math.round(stats.fps || 0);
+      els.stopBtn.disabled = !state.camera_active;
+      els.startBtn.disabled = state.camera_active;
+      els.heatmapBtn.disabled = !state.camera_active;
+
+      renderModelOptions(state.models || {}, state.current_model?.key);
+      updateModelMeta(state.current_model || { label: 'Unknown', speed: '-', accuracy: '-', device: 'cpu', key: 'fast' });
+
+      if (stats.last_snapshot) {
+        els.snapshotImage.src = `/${stats.last_snapshot.replace(/^\/+/, '')}?t=${Date.now()}`;
+        els.snapshotImage.style.display = 'block';
+        els.snapshotHint.textContent = 'Latest captured frame from a high-risk crowd event.';
+      }
+
+      if (state.camera_active) {
+        setFeedVisible(true);
+        if (!els.cameraStream.src || els.cameraStream.src.includes('blank')) {
+          els.cameraStream.src = `/camera_feed?t=${Date.now()}`;
+        }
+      } else {
+        setFeedVisible(false);
+      }
+
+      const newAlert = stats.alert_status || '';
+      if (newAlert && newAlert !== lastAlert && /warning|critical/i.test(newAlert)) {
+        toast(/critical/i.test(newAlert) ? 'error' : 'warn', newAlert, `${stats.people_count || 0} people detected at ${Number(stats.density || 0).toFixed(3)} persons/sqm.`);
+      }
+      lastAlert = newAlert;
+    }
+
+    async function pollState() {
+      try {
+        const res = await fetch('/system_state');
+        if (!res.ok) return;
+        renderState(await res.json());
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function applyModel() {
+      try {
+        const res = await fetch('/set_model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_key: els.modelSelect.value }),
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.detail || 'Could not switch model');
+        toast('success', 'Model updated', `${payload.model.label} is now active.`);
+        pollState();
+      } catch (err) {
+        toast('error', 'Model update failed', err.message);
+      }
+    }
+
+    async function startCamera() {
+      try {
+        const area = parseFloat(els.areaInput.value);
+        if (!area || area <= 0) throw new Error('Enter a valid coverage area.');
+        await applyModel();
+        const res = await fetch('/start_camera', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ area_sqm: area, source: els.cameraSource.value.trim() || 0 }),
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.detail || payload.status || 'Could not start source');
+        els.cameraStream.src = `/camera_feed?t=${Date.now()}`;
+        setFeedVisible(true);
+        toast('success', 'Source online', `Connected to ${payload.source}.`);
+        pollState();
+      } catch (err) {
+        toast('error', 'Start failed', err.message);
+      }
+    }
+
+    async function stopCamera() {
+      try {
+        await fetch('/stop_camera', { method: 'POST' });
+        els.cameraStream.removeAttribute('src');
+        setFeedVisible(false);
+        toast('info', 'Stream stopped', 'Live monitoring has been stopped.');
+        pollState();
+      } catch (err) {
+        toast('error', 'Stop failed', err.message);
+      }
+    }
+
+    async function toggleHeatmap() {
+      try {
+        const res = await fetch('/toggle_camera_heatmap', { method: 'POST' });
+        const payload = await res.json();
+        toast('info', 'Heat map updated', payload.heatmap_enabled ? 'Heat map enabled.' : 'Heat map disabled.');
+        els.cameraStream.src = `/camera_feed?t=${Date.now()}`;
+        pollState();
+      } catch (err) {
+        toast('error', 'Heat map failed', err.message);
+      }
+    }
+
+    els.applyModelBtn.addEventListener('click', applyModel);
+    els.startBtn.addEventListener('click', startCamera);
+    els.stopBtn.addEventListener('click', stopCamera);
+    els.heatmapBtn.addEventListener('click', toggleHeatmap);
+
+    pollState();
+    poller = setInterval(pollState, 1000);
+  </script>
+</body>
+</html>

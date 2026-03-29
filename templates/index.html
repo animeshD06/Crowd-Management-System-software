@@ -217,6 +217,43 @@
       margin: 0.25rem;
       display: inline-block;
     }
+    .control-center-card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 1.4rem;
+      padding: 1.6rem;
+      color: #fff;
+      box-shadow: 0 18px 44px rgba(0,0,0,0.22);
+    }
+    .system-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.92rem;
+      margin: 0.3rem;
+    }
+    .system-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.9rem;
+      margin-top: 1rem;
+    }
+    .system-metric {
+      padding: 1rem;
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .system-metric strong {
+      display: block;
+      font-size: 1.35rem;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -264,6 +301,37 @@
           </div>
         </div>
         <!-- Hero SVG Removed -->
+      </div>
+    </div>
+  </section>
+
+  <section class="container py-4">
+    <div class="control-center-card">
+      <div class="row g-4 align-items-end">
+        <div class="col-lg-7">
+          <h2 class="mb-2">System Control Center</h2>
+          <p class="text-light opacity-75 mb-3">Choose the model profile for upcoming live monitoring and uploads, then launch the dedicated live or preview workspaces.</p>
+          <div>
+            <span class="system-chip"><i class="bi bi-cpu"></i> <span id="systemModelLabel">Loading model...</span></span>
+            <span class="system-chip"><i class="bi bi-camera-video"></i> <span id="systemCameraState">Camera idle</span></span>
+            <span class="system-chip"><i class="bi bi-activity"></i> <span id="systemProcessingState">Processor idle</span></span>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <label for="globalModelSelect" class="form-label text-light">Global inference model</label>
+          <div class="d-flex gap-2">
+            <select id="globalModelSelect" class="form-select form-select-lg" style="background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.18);"></select>
+            <button class="btn btn-outline-light action-btn" id="applyGlobalModelBtn">
+              <i class="bi bi-check2-circle me-1"></i>Apply
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="system-grid">
+        <div class="system-metric"><span class="text-light opacity-75">Active model</span><strong id="systemModelMeta">-</strong></div>
+        <div class="system-metric"><span class="text-light opacity-75">Current device</span><strong id="systemDeviceMeta">-</strong></div>
+        <div class="system-metric"><span class="text-light opacity-75">Upload progress</span><strong id="systemUploadMeta">0%</strong></div>
+        <div class="system-metric"><span class="text-light opacity-75">Latest alert</span><strong id="systemAlertMeta">Safe</strong></div>
       </div>
     </div>
   </section>
@@ -375,7 +443,7 @@
           <div class="upload-placeholder">
             <i class="bi bi-cloud-upload fs-1 text-primary mb-3"></i>
             <p class="mb-2">Drag & drop your video here or <span class="text-primary fw-bold" onclick="document.getElementById('videoInput').click()">browse</span></p>
-            <small class="text-muted">Supported formats: MP4, MOV, AVI (Max size: 100MB)</small>
+            <small class="text-muted">Supported formats: MP4, MOV, AVI, MKV (Max size: 500MB)</small>
           </div>
         </div>
       </div>
@@ -771,6 +839,100 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const uploadStatus = document.getElementById('uploadStatus');
     const spinner = uploadBtn.querySelector('.spinner-border');
+    const globalModelSelect = document.getElementById('globalModelSelect');
+    const applyGlobalModelBtn = document.getElementById('applyGlobalModelBtn');
+    let uploadProgressInterval = null;
+
+    async function refreshSystemState() {
+      try {
+        const response = await fetch('/system_state');
+        if (!response.ok) return;
+        const state = await response.json();
+        const currentModel = state.current_model || {};
+        const cameraStats = state.camera_stats || {};
+        const processing = state.processing_status || {};
+        const models = Object.values(state.models || {});
+
+        if (globalModelSelect && !globalModelSelect.dataset.ready) {
+          globalModelSelect.innerHTML = models.map(model =>
+            `<option value="${model.key}" ${model.key === currentModel.key ? 'selected' : ''}>${model.label} · ${model.speed} · ${model.accuracy}</option>`
+          ).join('');
+          globalModelSelect.dataset.ready = '1';
+        }
+
+        document.getElementById('systemModelLabel').textContent = currentModel.label || 'Unknown';
+        document.getElementById('systemCameraState').textContent = state.camera_active ? 'Camera active' : 'Camera idle';
+        document.getElementById('systemProcessingState').textContent = processing.active ? 'Processing upload' : 'Processor idle';
+        document.getElementById('systemModelMeta').textContent = `${currentModel.speed || '-'} / ${currentModel.accuracy || '-'}`;
+        document.getElementById('systemDeviceMeta').textContent = (currentModel.device || '-').toUpperCase();
+        document.getElementById('systemUploadMeta').textContent = `${Number(processing.progress_percent || 0).toFixed(1)}%`;
+        document.getElementById('systemAlertMeta').textContent = cameraStats.alert_status || 'Safe';
+      } catch (error) {
+        console.error('System state error:', error);
+      }
+    }
+
+    applyGlobalModelBtn?.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/set_model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_key: globalModelSelect.value }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.detail || 'Model update failed');
+        }
+        uploadStatus.textContent = `Model switched to ${result.model.label}.`;
+        uploadStatus.className = 'mt-3 text-center status-message text-success fw-bold';
+        refreshSystemState();
+      } catch (error) {
+        uploadStatus.textContent = error.message;
+        uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+      }
+    });
+
+    async function monitorVideoProcessing() {
+      if (uploadProgressInterval) {
+        clearInterval(uploadProgressInterval);
+      }
+
+      uploadProgressInterval = setInterval(async () => {
+        try {
+          const response = await fetch('/processing_status');
+          if (!response.ok) {
+            return;
+          }
+
+          const status = await response.json();
+          if (status.error) {
+            uploadStatus.textContent = `Processing failed: ${status.error}`;
+            uploadStatus.className = 'mt-3 text-center status-message text-danger fw-bold';
+            clearInterval(uploadProgressInterval);
+            uploadProgressInterval = null;
+            return;
+          }
+
+          if (status.active) {
+            uploadStatus.textContent = `Processing video... ${status.progress_percent || 0}% complete (${status.processed_frames || 0}/${status.total_frames || 0} frames)`;
+            uploadStatus.className = 'mt-3 text-center status-message text-info';
+            return;
+          }
+
+          if (status.completed) {
+            uploadStatus.textContent = 'Analysis complete. Opening processed preview.';
+            uploadStatus.className = 'mt-3 text-center status-message text-success fw-bold';
+            clearInterval(uploadProgressInterval);
+            uploadProgressInterval = null;
+            setTimeout(() => {
+              window.location.href = '/live_preview';
+            }, 600);
+          }
+        } catch (error) {
+          console.error('Status polling error:', error);
+        }
+      }, 1200);
+    }
 
     // Drag and Drop for Video
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -866,12 +1028,10 @@
 
         if (response.ok) {
           const result = await response.json();
-          uploadStatus.textContent = `Analysis Complete! ${result.message || 'Crowd analysis results are ready.'}`;
+          uploadStatus.textContent = `${result.message || 'Upload complete.'} Processing has started.`;
           uploadStatus.className = 'mt-3 text-center status-message text-success fw-bold';
           gsap.fromTo(uploadStatus, {scale: 0.9, opacity:0}, {scale: 1, opacity:1, duration: 0.4, ease: 'back.out(1.7)'});
-          setTimeout(() => {
-            window.location.href = '/live_preview';
-          }, 2000);
+          monitorVideoProcessing();
         } else {
           const errorResult = await response.json().catch(() => ({ detail: "Server error. Please try again." }));
           uploadStatus.textContent = `Error ${response.status}: ${errorResult.detail || response.statusText}`;
@@ -1646,6 +1806,9 @@
 
     // Make exportSingleResult global
     window.exportSingleResult = exportSingleResult;
+
+    refreshSystemState();
+    setInterval(refreshSystemState, 1500);
 
     // Smooth scrolling for navbar links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {

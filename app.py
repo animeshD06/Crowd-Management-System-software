@@ -1,13 +1,25 @@
+import os
+
+WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
+LOCAL_CACHE_DIR = os.path.join(WORKSPACE_ROOT, ".runtime_cache")
+REMOTE_DEVICES_FILE = os.path.join(WORKSPACE_ROOT, "artifacts", "remote_devices.json")
+os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(REMOTE_DEVICES_FILE), exist_ok=True)
+os.environ.setdefault("TORCH_HOME", os.path.join(LOCAL_CACHE_DIR, "torch"))
+os.environ.setdefault("ULTRALYTICS_CONFIG_DIR", os.path.join(LOCAL_CACHE_DIR, "ultralytics"))
+
 import uvicorn
 from fastapi import FastAPI, Request, File, UploadFile, HTTPException, Query
 from yolo_inference import YOLOInference, PIXELS_PER_SQM
-import os
 import cv2
 import threading
 import uvicorn
 import numpy as np
 import time
 import json
+import re
+import uuid
+from pathlib import Path
 from typing import List
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,13 +45,45 @@ camera_thread = None
 current_camera_frame = None
 frame_lock = threading.Lock()
 camera_area_sqm = 50.0  # Default area in square meters
+camera_source = 0
+camera_source_label = "Webcam 0"
 camera_stats = {
     "people_count": 0,
     "density": 0.0,
     "density_level": "Low",
     "alert_status": "Safe",
-    "fps": 0
+    "fps": 0,
+    "source": camera_source_label,
+    "heatmap_enabled": False,
+    "last_snapshot": None,
+    "last_error": None,
+    "model": "fast",
+    "model_label": "YOLOv8 Nano",
 }
+
+current_model_key = "fast"
+
+MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024
+MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
+
+processing_status = {
+    "active": False,
+    "filename": None,
+    "progress_percent": 0.0,
+    "processed_frames": 0,
+    "total_frames": 0,
+    "people_count": 0,
+    "density": 0.0,
+    "completed": False,
+    "output_path": None,
+    "error": None,
+}
+
+remote_devices_lock = threading.Lock()
+mobile_frames_lock = threading.Lock()
+mobile_frames = {}
 
 # Setup directories
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
@@ -47,6 +91,7 @@ PROCESSED_FOLDER = os.path.join('static', 'processed')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PROCESSED_FOLDER, exist_ok=True)
+os.makedirs("snapshots", exist_ok=True)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -55,8 +100,158 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "templates"))
 
 # Initialize YOLO with optimized parameters for better accuracy
-model_path = 'yolov8n'
+model_path = 'yolov8n.pt'
 yolo_infer = YOLOInference(model_path=model_path)  # Use YOLOv8n with improved settings
+camera_stats["model"] = yolo_infer.get_model_status()["key"]
+camera_stats["model_label"] = yolo_infer.get_model_status()["label"]
+
+
+def sanitize_filename(filename: str) -> str:
+    base = Path(filename or "").name
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", base)
+    return sanitized or f"upload_{int(time.time())}"
+
+
+def validate_extension(filename: str, allowed_extensions: set[str], label: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f"Invalid {label} file type")
+    return ext
+
+
+def parse_camera_source(source_value):
+    if source_value is None or source_value == "":
+        return 0, "Webcam 0"
+
+    text = str(source_value).strip()
+    if text.isdigit():
+        index = int(text)
+        return index, f"Webcam {index}"
+    return text, text
+
+
+def load_remote_devices():
+    if not os.path.exists(REMOTE_DEVICES_FILE):
+        return []
+    try:
+        with open(REMOTE_DEVICES_FILE, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_remote_devices(devices):
+    with open(REMOTE_DEVICES_FILE, "w", encoding="utf-8") as handle:
+        json.dump(devices, handle, indent=2)
+
+
+def get_remote_devices():
+    with remote_devices_lock:
+        return load_remote_devices()
+
+
+def upsert_remote_device(device):
+    with remote_devices_lock:
+        devices = load_remote_devices()
+        for index, existing in enumerate(devices):
+            if existing["id"] == device["id"]:
+                devices[index] = device
+                save_remote_devices(devices)
+                return device
+        devices.append(device)
+        save_remote_devices(devices)
+        return device
+
+
+def remove_remote_device(device_id):
+    with remote_devices_lock:
+        devices = [device for device in load_remote_devices() if device["id"] != device_id]
+        save_remote_devices(devices)
+
+
+def build_source_from_device(device):
+    if device["type"] == "mobile":
+        return f"mobile:{device['id']}", device["name"]
+    return device["source"], device["name"]
+
+
+def resolve_source_value(source_value):
+    parsed_source, parsed_label = parse_camera_source(source_value)
+    if isinstance(parsed_source, str):
+        for device in get_remote_devices():
+            if parsed_source == device["id"]:
+                return build_source_from_device(device)
+    return parsed_source, parsed_label
+
+
+def get_mobile_frame(device_id):
+    with mobile_frames_lock:
+        frame_info = mobile_frames.get(device_id)
+        if not frame_info:
+            return None, None
+        return frame_info.get("frame"), frame_info.get("timestamp")
+
+
+def reset_processing_status():
+    processing_status.update({
+        "active": False,
+        "filename": None,
+        "progress_percent": 0.0,
+        "processed_frames": 0,
+        "total_frames": 0,
+        "people_count": 0,
+        "density": 0.0,
+        "completed": False,
+        "output_path": None,
+        "error": None,
+    })
+
+
+def update_processing_status(processed_frames, total_frames, people_count, density, completed=False):
+    processing_status["active"] = not completed
+    processing_status["processed_frames"] = int(processed_frames or 0)
+    processing_status["total_frames"] = int(total_frames or 0)
+    processing_status["people_count"] = int(people_count or 0)
+    processing_status["density"] = float(density or 0.0)
+    processing_status["completed"] = bool(completed)
+    processing_status["progress_percent"] = round(
+        (processed_frames / total_frames) * 100, 1
+    ) if total_frames else (100.0 if completed else 0.0)
+
+
+def process_video_job(video_path: str, processed_path: str, original_filename: str):
+    reset_processing_status()
+    processing_status["active"] = True
+    processing_status["filename"] = original_filename
+    processing_status["output_path"] = f"/static/processed/{os.path.basename(processed_path)}"
+    try:
+        yolo_infer.process_video(video_path, processed_path, progress_callback=update_processing_status)
+    except Exception as exc:
+        processing_status["active"] = False
+        processing_status["completed"] = False
+        processing_status["error"] = str(exc)
+    else:
+        processing_status["active"] = False
+        processing_status["completed"] = True
+
+
+def open_video_source(source):
+    if isinstance(source, int):
+        return cv2.VideoCapture(source, cv2.CAP_DSHOW)
+    return cv2.VideoCapture(source)
+
+
+def get_system_state():
+    model_status = yolo_infer.get_model_status()
+    return {
+        "camera_active": camera_active,
+        "camera_stats": camera_stats,
+        "processing_status": processing_status,
+        "models": yolo_infer.get_available_models(),
+        "current_model": model_status,
+        "remote_devices": get_remote_devices(),
+    }
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -74,35 +269,140 @@ async def toggle_heatmap():
 
 @app.get("/live_camera", response_class=HTMLResponse)
 async def live_camera(request: Request):
-    return templates.TemplateResponse("live_camera.html", {"request": request})
+    return templates.TemplateResponse("live_camera_v2.html", {"request": request})
+
+
+@app.get("/remote_devices", response_class=HTMLResponse)
+async def remote_devices_page(request: Request):
+    return templates.TemplateResponse("remote_devices.html", {"request": request})
+
+
+@app.get("/mobile_camera/{device_id}", response_class=HTMLResponse)
+async def mobile_camera_page(request: Request, device_id: str):
+    devices = get_remote_devices()
+    device = next((item for item in devices if item["id"] == device_id and item["type"] == "mobile"), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Mobile device not found")
+    return templates.TemplateResponse("mobile_camera.html", {"request": request, "device": device})
+
+
+@app.get("/system_state")
+async def system_state():
+    return get_system_state()
+
+
+@app.get("/api/devices")
+async def list_devices():
+    return {"devices": get_remote_devices()}
+
+
+@app.post("/api/devices")
+async def create_device(request: Request):
+    payload = await request.json()
+    device_type = payload.get("type", "").strip().lower()
+    name = payload.get("name", "").strip() or "Unnamed Device"
+    source = payload.get("source", "").strip()
+    allowed_types = {"cctv", "ip", "mobile"}
+    if device_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Device type must be cctv, ip, or mobile")
+    if device_type != "mobile" and not source:
+        raise HTTPException(status_code=400, detail="Source URL is required for CCTV/IP devices")
+
+    device = {
+        "id": payload.get("id") or uuid.uuid4().hex[:10],
+        "name": name,
+        "type": device_type,
+        "source": source,
+        "notes": payload.get("notes", "").strip(),
+        "created_at": int(time.time()),
+    }
+    upsert_remote_device(device)
+    return {
+        "message": "Device saved",
+        "device": device,
+        "mobile_url": f"/mobile_camera/{device['id']}" if device_type == "mobile" else None,
+        "live_source": f"mobile:{device['id']}" if device_type == "mobile" else device["source"],
+    }
+
+
+@app.delete("/api/devices/{device_id}")
+async def delete_device(device_id: str):
+    remove_remote_device(device_id)
+    return {"message": "Device removed"}
+
+
+@app.post("/api/mobile_frame/{device_id}")
+async def ingest_mobile_frame(device_id: str, frame: UploadFile = File(...)):
+    content = await frame.read()
+    np_buffer = np.frombuffer(content, dtype=np.uint8)
+    decoded = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise HTTPException(status_code=400, detail="Invalid image frame")
+
+    with mobile_frames_lock:
+        mobile_frames[device_id] = {"frame": decoded, "timestamp": time.time()}
+    return {"message": "Frame received"}
+
+
+@app.get("/api/mobile_frame/{device_id}/status")
+async def mobile_frame_status(device_id: str):
+    _, timestamp = get_mobile_frame(device_id)
+    return {"connected": timestamp is not None and (time.time() - timestamp) < 5, "last_frame_ts": timestamp}
+
+
+@app.post("/set_model")
+async def set_model(request: Request):
+    global current_model_key
+
+    payload = await request.json()
+    model_key = payload.get("model_key", "fast")
+    if model_key not in yolo_infer.get_available_models():
+        raise HTTPException(status_code=400, detail="Unknown model")
+    if camera_active:
+        raise HTTPException(status_code=409, detail="Stop the live camera before switching models")
+
+    try:
+        yolo_infer.load_model(model_key=model_key)
+        current_model_key = model_key
+        model_status = yolo_infer.get_model_status()
+        camera_stats["model"] = model_status["key"]
+        camera_stats["model_label"] = model_status["label"]
+        return {"message": "Model updated", "model": model_status}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/start_camera")
 async def start_camera(request: Request):
-    global camera_active, camera_thread, camera_area_sqm
+    global camera_active, camera_thread, camera_area_sqm, camera_source, camera_source_label
 
     if camera_active:
         return {"status": "Camera already active"}
 
-    # Get area from request body
     try:
         data = await request.json()
         area_sqm = data.get("area_sqm", 50.0)
+        source_value = data.get("source", 0)
         if area_sqm <= 0:
             return {"status": "Invalid area value"}
         camera_area_sqm = float(area_sqm)
-    except:
-        camera_area_sqm = 50.0  # Default if no area provided
+        camera_source, camera_source_label = resolve_source_value(source_value)
+    except Exception:
+        camera_area_sqm = 50.0
+        camera_source, camera_source_label = 0, "Webcam 0"
 
     camera_active = True
     camera_thread = threading.Thread(target=run_camera_processing, daemon=True)
     camera_thread.start()
 
-    return {"status": "Camera started successfully"}
+    camera_stats["source"] = camera_source_label
+    camera_stats["last_error"] = None
+    return {"status": "Camera started successfully", "source": camera_source_label}
 
 @app.post("/stop_camera")
 async def stop_camera():
     global camera_active
     camera_active = False
+    camera_stats["fps"] = 0
     return {"status": "Camera stopped"}
 
 @app.get("/camera_feed")
@@ -143,53 +443,45 @@ async def get_camera_stats():
 
 @app.post("/toggle_camera_heatmap")
 async def toggle_camera_heatmap():
-    return {"heatmap_enabled": True}
+    yolo_infer.set_heatmap_enabled(not yolo_infer.enable_heat_map)
+    camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
+    return {"heatmap_enabled": yolo_infer.enable_heat_map}
+
+
+@app.get("/processing_status")
+async def get_processing_status():
+    return processing_status
 
 def run_camera_processing():
     """FIXED: Run camera processing with real YOLO model"""
-    global current_camera_frame, camera_stats, camera_active, frame_lock, model
-    
-    # Initialize YOLO model inside thread (thread-safe approach)
+    global current_camera_frame, camera_stats, camera_active, frame_lock
+
     try:
-        print("Loading YOLO model...")
-        # Update this path to your actual model path
-        model_path = 'yolov8n'  # Faster model for better FPS
-        # model_path = 'yolo11x'  # Or use pre-trained model
-        
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = YOLO(model_path)
-        model.to(device)
-        print(f"YOLO model loaded successfully on {device}")
-        
+        yolo_infer.load_model(model_key=current_model_key)
+        model = yolo_infer.model
+        model_status = yolo_infer.get_model_status()
+        camera_stats["model"] = model_status["key"]
+        camera_stats["model_label"] = model_status["label"]
     except Exception as e:
-        print(f"Error loading YOLO model: {e}")
-        print("Falling back to pre-trained YOLO11n model...")
-        try:
-            model = YOLO("yolo11n")  # Download and use YOLO11n
-            print("YOLO11n model loaded successfully")
-        except Exception as e2:
-            print(f"Error loading YOLO11n model: {e2}")
-            print("Falling back to YOLOv8n...")
-            try:
-                model = YOLO("yolov8n.pt")  # Final fallback
-                print("YOLOv8n fallback model loaded successfully")
-            except Exception as e3:
-                print(f"Error loading final fallback model: {e3}")
-                camera_active = False
-                return
-    
-    # Initialize camera
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        print("Error: Could not open camera")
+        print(f"Error loading active model: {e}")
+        camera_stats["last_error"] = str(e)
         camera_active = False
         return
+    
+    cap = None
+    mobile_device_id = None
+    if isinstance(camera_source, str) and camera_source.startswith("mobile:"):
+        mobile_device_id = camera_source.split(":", 1)[1]
+    else:
+        cap = open_video_source(camera_source)
+        if not cap.isOpened():
+            print(f"Error: Could not open camera source {camera_source_label}")
+            camera_stats["last_error"] = f"Could not open source: {camera_source_label}"
+            camera_active = False
+            return
 
-    # Let camera use native resolution for correct aspect ratio
-    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-    # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-    cap.set(cv2.CAP_PROP_FPS, 25)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_FPS, 25)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     print("Camera processing started with YOLO model")
 
@@ -200,15 +492,32 @@ def run_camera_processing():
     frame_skip_counter = 0
     FRAME_SKIP_RATE = 1  # Process every frame for maximum FPS
     last_people_count = 0
-    last_density = 0.0
     estimated_camera_area = None  # For dynamic estimation if not user-provided
     user_provided_area = camera_area_sqm != 50.0  # Assume 50.0 is default
+    camera_stats["source"] = camera_source_label
+    camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
 
     while camera_active:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Could not read from camera")
-            break
+        if mobile_device_id:
+            mobile_frame, frame_timestamp = get_mobile_frame(mobile_device_id)
+            if mobile_frame is None or frame_timestamp is None or (time.time() - frame_timestamp) > 5:
+                placeholder = np.zeros((480, 800, 3), dtype=np.uint8)
+                cv2.putText(placeholder, "Waiting for mobile camera connection...", (80, 210),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                cv2.putText(placeholder, "Open the mobile broadcaster page and allow camera access.", (55, 255),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 220, 255), 2)
+                with frame_lock:
+                    current_camera_frame = placeholder
+                camera_stats["last_error"] = "Waiting for mobile device frames"
+                time.sleep(0.08)
+                continue
+            frame = mobile_frame.copy()
+        else:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Could not read from camera")
+                camera_stats["last_error"] = f"Could not read from source: {camera_source_label}"
+                break
 
         try:
             height, width = frame.shape[:2]
@@ -226,7 +535,7 @@ def run_camera_processing():
 
             if process_frame and model is not None:
                 # Run YOLO inference with optimized parameters for better accuracy
-                results = model(frame, conf=0.4, device=model.device, verbose=False, imgsz=416, max_det=50, iou=0.5)
+                results = model(frame, conf=0.35, device=yolo_infer.device, verbose=False, imgsz=640, max_det=100, iou=0.45)
 
                 # Process YOLO results
                 for result in results:
@@ -289,9 +598,15 @@ def run_camera_processing():
 
             # Update stats with real detection data
             camera_stats["people_count"] = smoothed_count
-            camera_stats["density"] = density
+            camera_stats["density"] = round(density, 3)
             camera_stats["density_level"] = yolo_infer.get_density_level(density)
             camera_stats["alert_status"] = yolo_infer.get_alert_status(density, smoothed_count)
+            camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
+
+            alert_event = yolo_infer.handle_alert(frame, density, smoothed_count, source_label=camera_source_label)
+            if alert_event:
+                camera_stats["last_snapshot"] = alert_event["snapshot_path"].replace("\\", "/")
+                camera_stats["alert_status"] = alert_event["status"]
             
             # Calculate FPS
             fps_counter += 1
@@ -305,37 +620,46 @@ def run_camera_processing():
             
         except Exception as e:
             print(f"Error processing frame: {e}")
+            camera_stats["last_error"] = str(e)
             with frame_lock:
                 current_camera_frame = frame
         
         time.sleep(0.04)
 
-    cap.release()
+    if cap is not None:
+        cap.release()
+    camera_stats["fps"] = 0
     print("Camera processing stopped")
 
 @app.post("/upload")
 async def upload(video: UploadFile = File(...)):
     if not video.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
-    
-    video_path = os.path.join(UPLOAD_FOLDER, video.filename)
-    
-    # Save uploaded file
+
+    validate_extension(video.filename, ALLOWED_VIDEO_EXTENSIONS, "video")
+    safe_name = sanitize_filename(video.filename)
+    video_path = os.path.join(UPLOAD_FOLDER, safe_name)
+    content = await video.read()
+    if len(content) > MAX_VIDEO_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Video exceeds 500MB limit")
+
     with open(video_path, "wb") as buffer:
-        content = await video.read()
         buffer.write(content)
-    
-    processed_filename = f"processed_{video.filename}"
+
+    processed_filename = f"processed_{safe_name}"
     processed_path = os.path.join(PROCESSED_FOLDER, processed_filename)
-    
-    # Start processing in background thread
+
     threading.Thread(
-        target=yolo_infer.process_video,
-        args=(video_path, processed_path),
+        target=process_video_job,
+        args=(video_path, processed_path, safe_name),
         daemon=True
     ).start()
-    
-    return {"message": "File uploaded successfully"}
+
+    return {
+        "message": "File uploaded successfully",
+        "filename": safe_name,
+        "processed_file": f"/static/processed/{processed_filename}",
+    }
 
 @app.post("/upload_image")
 async def upload_image(
@@ -349,21 +673,18 @@ async def upload_image(
     if not image.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
-    # Check if it's an image
-    allowed_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
-    ext = os.path.splitext(image.filename)[1].lower()
-    if ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only image files are allowed.")
+    validate_extension(image.filename, ALLOWED_IMAGE_EXTENSIONS, "image")
+    safe_name = sanitize_filename(image.filename)
+    content = await image.read()
+    if len(content) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Image exceeds 50MB limit")
 
-    image_path = os.path.join(UPLOAD_FOLDER, image.filename)
+    image_path = os.path.join(UPLOAD_FOLDER, safe_name)
 
-    # Save uploaded file
     with open(image_path, "wb") as buffer:
-        content = await image.read()
         buffer.write(content)
 
-    # Process the image with area-based analysis
-    processed_filename = f"processed_{image.filename}"
+    processed_filename = f"processed_{safe_name}"
     processed_path = os.path.join(PROCESSED_FOLDER, processed_filename)
 
     # Parse region data
@@ -562,7 +883,7 @@ def draw_region_on_image(frame, region_info):
 
 @app.get("/live_preview", response_class=HTMLResponse)
 async def live_preview(request: Request):
-    return templates.TemplateResponse("live_preview.html", {"request": request})
+    return templates.TemplateResponse("live_preview_v2.html", {"request": request})
 
 @app.get("/video_feed")
 async def video_feed():
@@ -610,8 +931,8 @@ async def process_video_route():
     output_video_path = os.path.join(PROCESSED_FOLDER, "output.mp4")
     
     threading.Thread(
-        target=yolo_infer.process_video,
-        args=(input_video_path, output_video_path),
+        target=process_video_job,
+        args=(input_video_path, output_video_path, "input.mp4"),
         daemon=True
     ).start()
     
@@ -636,30 +957,44 @@ async def batch_process(
         if not file.filename:
             continue
 
-        # Check file type and size
-        allowed_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.mp4', '.mov', '.avi'}
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in allowed_extensions:
+        safe_name = sanitize_filename(file.filename)
+        ext = Path(safe_name).suffix.lower()
+        if ext not in ALLOWED_IMAGE_EXTENSIONS.union(ALLOWED_VIDEO_EXTENSIONS):
             continue
 
-        file_path = os.path.join(UPLOAD_FOLDER, f"batch_{file.filename}")
-        processed_filename = f"batch_processed_{file.filename}"
+        file_path = os.path.join(UPLOAD_FOLDER, f"batch_{safe_name}")
+        processed_filename = f"batch_processed_{safe_name}"
         processed_path = os.path.join(PROCESSED_FOLDER, processed_filename)
 
-        # Save uploaded file
+        content = await file.read()
+        size_limit = MAX_IMAGE_SIZE_BYTES if ext in ALLOWED_IMAGE_EXTENSIONS else MAX_VIDEO_SIZE_BYTES
+        if len(content) > size_limit:
+            results.append({
+                "filename": safe_name,
+                "error": "File exceeds size limit",
+                "detected_people_count": 0,
+                "safety_status": "error"
+            })
+            continue
+
         with open(file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
 
         try:
-            if file.content_type.startswith('image/'):
+            content_type = file.content_type or ""
+            if content_type.startswith('image/'):
                 # Process image
                 result = process_image_batch(file_path, processed_path, personal_space, scale_factor)
-            elif file.content_type.startswith('video/'):
+            elif content_type.startswith('video/'):
                 # Process video (extract first frame for demo)
                 result = process_video_batch(file_path, processed_path, personal_space, scale_factor)
             else:
-                continue
+                if ext in ALLOWED_IMAGE_EXTENSIONS:
+                    result = process_image_batch(file_path, processed_path, personal_space, scale_factor)
+                elif ext in ALLOWED_VIDEO_EXTENSIONS:
+                    result = process_video_batch(file_path, processed_path, personal_space, scale_factor)
+                else:
+                    continue
 
             result["filename"] = file.filename
             result["processed_file"] = f"/static/processed/{processed_filename}"

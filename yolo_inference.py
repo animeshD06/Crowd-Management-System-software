@@ -6,8 +6,16 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import threading
 import os
 import numpy as np
+import json
+from urllib import request as urllib_request
 from sklearn.linear_model import LinearRegression
 from room_capacity import estimate_room_capacity
+
+WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
+LOCAL_MODEL_DIRS = [
+    WORKSPACE_ROOT,
+    os.path.join(WORKSPACE_ROOT, "Crowd-Management-System-software-main"),
+]
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -15,7 +23,7 @@ from room_capacity import estimate_room_capacity
 CROWD_THRESHOLD = 30  # For Discord alerts (overall count threshold)
 ALERT_DELAY = 15  # Minimum seconds between alerts
 MOTION_THRESHOLD = 5000  # For background subtraction
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1334259674580516979/pH92tTp_wnYG2a5j6KNgPHHHmbQRC7Hs8L01KANDKiQrw7iE4jPa6iuWqauLY1G6DqoD"
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 SNAPSHOT_FOLDER = "snapshots"
 os.makedirs(SNAPSHOT_FOLDER, exist_ok=True)
 
@@ -48,28 +56,32 @@ NUM_GRID_ROWS = 6  # Grid rows
 NUM_GRID_COLS = 6  # Grid cols
 GRID_CELL_THRESHOLD = 3  # If cell count >= this, mark it
 
+DENSITY_THRESHOLDS = {
+    "low": 1.0,
+    "moderate": 2.0,
+    "high": 3.0,
+}
+
 # DeepSort tracker
 tracker = DeepSort(max_age=30, embedder="mobilenet")
+
+MODEL_CATALOG = {
+    "fast": {"path": "yolov8n.pt", "label": "YOLOv8 Nano", "speed": "Fastest", "accuracy": "Balanced"},
+    "balanced": {"path": "yolo11n", "label": "YOLO11 Nano", "speed": "Fast", "accuracy": "Better"},
+    "accurate": {"path": "yolov8m.pt", "label": "YOLOv8 Medium", "speed": "Medium", "accuracy": "High"},
+    "max": {"path": "yolov8x.pt", "label": "YOLOv8 XLarge", "speed": "Slower", "accuracy": "Highest"},
+}
 
 
 class YOLOInference:
     def __init__(self, model_path="runs/detect/yolo11x_head12/weights/best.pt"):
         """Initialize YOLOv11 model and other settings."""
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        model_path = os.path.basename(model_path) if os.path.isabs(model_path) else model_path
-        try:
-            self.model = YOLO(model_path).to(self.device)
-            print(f"[INFO] YOLOv11 model loaded on device: {self.device}")
-        except Exception as e:
-            print(f"Error loading YOLO model: {e}")
-            print("Falling back to pre-trained YOLOv8n model...")
-            try:
-                self.model = YOLO("yolov8n.pt").to(self.device)
-                print("Fallback model loaded successfully")
-            except Exception as e2:
-                print(f"Error loading fallback model: {e2}")
-                self.model = None
+        self.model_lock = threading.Lock()
+        self.current_model_key = "fast"
+        self.current_model_label = "YOLOv8 Nano"
+        self.model = None
+        self.load_model(model_path=model_path)
 
         self.last_alert_time = 0
         self.fgbg = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
@@ -98,6 +110,159 @@ class YOLOInference:
 
         # Threading lock
         self.frame_lock = threading.Lock()
+
+    def get_available_models(self):
+        return {
+            key: {
+                "key": key,
+                "label": value["label"],
+                "speed": value["speed"],
+                "accuracy": value["accuracy"],
+                "path": value["path"],
+            }
+            for key, value in MODEL_CATALOG.items()
+        }
+
+    def load_model(self, model_key=None, model_path=None):
+        """Load a configured model variant and track active metadata."""
+        with self.model_lock:
+            chosen_key = model_key if model_key in MODEL_CATALOG else self.current_model_key
+            target_path = model_path or MODEL_CATALOG.get(chosen_key, MODEL_CATALOG["fast"])["path"]
+            target_path = self.resolve_model_path(target_path)
+
+            try:
+                self.model = YOLO(target_path).to(self.device)
+                if model_key in MODEL_CATALOG:
+                    self.current_model_key = model_key
+                    self.current_model_label = MODEL_CATALOG[model_key]["label"]
+                else:
+                    self.current_model_label = target_path
+                print(f"[INFO] YOLO model loaded: {self.current_model_label} on {self.device}")
+            except Exception as exc:
+                print(f"Error loading YOLO model {target_path}: {exc}")
+                if target_path != MODEL_CATALOG["fast"]["path"]:
+                    fallback_path = MODEL_CATALOG["fast"]["path"]
+                    self.model = YOLO(fallback_path).to(self.device)
+                    self.current_model_key = "fast"
+                    self.current_model_label = MODEL_CATALOG["fast"]["label"]
+                    print("[INFO] Fallback model loaded successfully")
+                else:
+                    self.model = None
+                    raise
+
+    def resolve_model_path(self, target_path):
+        """Prefer local workspace weights before falling back to Ultralytics asset names."""
+        if os.path.isabs(target_path) and os.path.exists(target_path):
+            return target_path
+
+        candidate_name = os.path.basename(target_path)
+        local_candidates = [
+            target_path,
+            candidate_name,
+            os.path.join(WORKSPACE_ROOT, candidate_name),
+            os.path.join(WORKSPACE_ROOT, target_path),
+        ]
+        for model_dir in LOCAL_MODEL_DIRS:
+            local_candidates.append(os.path.join(model_dir, candidate_name))
+            local_candidates.append(os.path.join(model_dir, target_path))
+
+        for candidate in local_candidates:
+            if candidate and os.path.exists(candidate):
+                return candidate
+
+        return target_path
+
+    def get_model_status(self):
+        meta = MODEL_CATALOG.get(self.current_model_key, {})
+        return {
+            "key": self.current_model_key,
+            "label": self.current_model_label,
+            "device": self.device,
+            "speed": meta.get("speed", "Unknown"),
+            "accuracy": meta.get("accuracy", "Unknown"),
+        }
+
+    def get_density_level(self, density):
+        """Return density level aligned with SRS thresholds."""
+        if density < DENSITY_THRESHOLDS["low"]:
+            return "Low"
+        if density < DENSITY_THRESHOLDS["moderate"]:
+            return "Moderate"
+        if density < DENSITY_THRESHOLDS["high"]:
+            return "High"
+        return "Critical"
+
+    def get_alert_status(self, density, people_count=0):
+        """Return alert text aligned with density level."""
+        level = self.get_density_level(density)
+        if level == "Low":
+            return "Safe"
+        if level == "Moderate":
+            return "Monitor Closely"
+        if level == "High":
+            return "Warning"
+        return "Critical Alert"
+
+    def should_trigger_alert(self, density, people_count=0):
+        """Trigger alerts for high density or unusually large crowds."""
+        return density >= DENSITY_THRESHOLDS["high"] or people_count >= CROWD_THRESHOLD
+
+    def save_alert_snapshot(self, frame, prefix="alert"):
+        """Persist an alert frame and return the saved path."""
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"{prefix}_{timestamp}.jpg"
+        snapshot_path = os.path.join(SNAPSHOT_FOLDER, filename)
+        cv2.imwrite(snapshot_path, frame)
+        return snapshot_path
+
+    def send_discord_alert(self, payload):
+        """Send an alert payload to Discord if a webhook is configured."""
+        if not DISCORD_WEBHOOK_URL:
+            return False, "Discord webhook not configured"
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib_request.Request(
+            DISCORD_WEBHOOK_URL,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=5) as response:
+                return 200 <= response.status < 300, f"Discord status {response.status}"
+        except Exception as exc:
+            return False, str(exc)
+
+    def handle_alert(self, frame, density, people_count, source_label="Live Camera"):
+        """Rate-limit alert creation, capture a snapshot, and optionally notify Discord."""
+        if not self.should_trigger_alert(density, people_count):
+            return None
+
+        now = time.time()
+        if now - self.last_alert_time < ALERT_DELAY:
+            return None
+
+        self.last_alert_time = now
+        snapshot_path = self.save_alert_snapshot(frame, prefix="crowd")
+        payload = {
+            "username": "Crowd Management System",
+            "content": (
+                f"{self.get_alert_status(density, people_count)} on {source_label}: "
+                f"{people_count} people detected at {density:.2f} persons/m^2."
+            ),
+        }
+        delivered, message = self.send_discord_alert(payload)
+
+        return {
+            "status": self.get_alert_status(density, people_count),
+            "density_level": self.get_density_level(density),
+            "density": round(density, 3),
+            "people_count": int(people_count),
+            "snapshot_path": snapshot_path,
+            "discord_delivered": delivered,
+            "discord_message": message,
+            "timestamp": int(now),
+        }
 
     def set_heatmap_enabled(self, state: bool):
         self.enable_heat_map = state
@@ -189,13 +354,14 @@ class YOLOInference:
         
         return subimg
 
-    def process_video(self, input_path, output_path):
+    def process_video(self, input_path, output_path, progress_callback=None):
         """Processes the input video using YOLOv11 and DeepSort."""
         print(f"[INFO] Opening video: {input_path}")
         cap = cv2.VideoCapture(input_path)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         if fps <= 0:
             fps = 25
             print(f"[WARN] Invalid FPS detected. Defaulting to: {fps} fps")
@@ -270,9 +436,13 @@ class YOLOInference:
             # Write frame
             out.write(frame)
             self.latest_frame = frame.copy()
+            if progress_callback:
+                progress_callback(frame_count, total_frames, smoothed_count, density)
 
         cap.release()
         out.release()
+        if progress_callback:
+            progress_callback(total_frames or frame_count, total_frames, 0, 0.0, completed=True)
         print(f"[INFO] Finished processing. Output saved to: {output_path}")
 
     def process_image(self, image_path, output_path=None):
@@ -347,33 +517,6 @@ class YOLOInference:
             "estimated_area_sqm": estimated_area_sqm,
             "processed_image_path": output_path if output_path else None
         }
-
-    def get_density_level(self, density):
-        """Determine crowd density level based on people per square meter"""
-        if density < 0.05:
-            return "None"
-        elif density < 0.2:
-            return "Low"
-        elif density < 0.5:
-            return "Medium"
-        elif density < 1.0:
-            return "High"
-        else:
-            return "Critical"
-
-    def get_alert_status(self, density, people_count=0):
-        """Determine alert status based on density and people count for enhanced risk analysis"""
-        # Enhanced risk analysis considering both density and absolute count
-        risk_score = density * 10 + (people_count / 10)  # Weighted combination
-
-        if risk_score < 5:
-            return "Safe"
-        elif risk_score < 15:
-            return "Caution"
-        elif risk_score < 25:
-            return "Warning"
-        else:
-            return "Critical Alert"
 
     def calculate_approximate_area(self, width, height):
         """Calculate approximate area in square meters based on image dimensions.
