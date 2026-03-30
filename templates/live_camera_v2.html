@@ -207,6 +207,54 @@
       gap: 10px;
       margin-top: 12px;
     }
+    .hint-card, .device-row {
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .hint-card {
+      padding: 13px 14px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 14px;
+      line-height: 1.55;
+    }
+    .device-row {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .device-row strong { color: var(--text); }
+    .device-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .device-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      width: fit-content;
+      font-size: 13px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+    }
+    .device-status.online {
+      color: #b8ffdf;
+      background: rgba(74, 210, 149, 0.12);
+    }
+    .device-status.offline {
+      color: #ffd6a1;
+      background: rgba(255, 184, 77, 0.12);
+    }
+    .muted-copy {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
     .meta-item {
       display: flex;
       justify-content: space-between;
@@ -336,6 +384,20 @@
             <button class="btnx warn" id="heatmapBtn" disabled><i class="bi bi-thermometer-half"></i> Toggle Heatmap</button>
             <button class="btnx secondary" id="applyModelBtn"><i class="bi bi-cpu"></i> Apply Model</button>
           </div>
+          <div class="hint-card">
+            For a phone stream: save a mobile device in Remote Devices, open its phone link on the mobile browser, tap <strong>Start Camera Sharing</strong>, then use that device here.
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Phone Remote Device</h3>
+          <div class="field">
+            <label for="savedDeviceSelect">Saved device</label>
+            <select id="savedDeviceSelect" class="select"></select>
+          </div>
+          <div class="device-row" id="savedDeviceCard">
+            <div class="muted-copy">Select a saved phone device to see its share link, connection status, and one-click source setup.</div>
+          </div>
         </div>
 
         <div class="panel">
@@ -383,10 +445,14 @@
       snapshotImage: document.getElementById('snapshotImage'),
       snapshotHint: document.getElementById('snapshotHint'),
       toastStack: document.getElementById('toastStack'),
+      savedDeviceSelect: document.getElementById('savedDeviceSelect'),
+      savedDeviceCard: document.getElementById('savedDeviceCard'),
     };
 
     let poller = null;
     let lastAlert = '';
+    let remoteDevices = [];
+    const initialSource = new URLSearchParams(window.location.search).get('source');
 
     function toast(type, title, message) {
       const node = document.createElement('div');
@@ -399,6 +465,79 @@
     function setFeedVisible(active) {
       els.cameraStream.style.display = active ? 'block' : 'none';
       els.feedOverlay.style.display = active ? 'none' : 'flex';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast('success', 'Copied', text))
+        .catch(() => toast('error', 'Copy failed', 'Clipboard access was blocked by the browser.'));
+    }
+
+    function selectRemoteDevice(deviceId) {
+      const device = remoteDevices.find(item => item.id === deviceId);
+      if (!device) {
+        els.cameraSource.value = '';
+        return;
+      }
+      els.cameraSource.value = device.type === 'mobile' ? device.id : (device.live_source || device.source || '');
+      toast('info', 'Source ready', `${device.name} has been loaded into the source field.`);
+    }
+
+    function renderSavedDevices(devices) {
+      remoteDevices = devices || [];
+      const mobileDevices = remoteDevices.filter(device => device.type === 'mobile');
+      const previousSelection = els.savedDeviceSelect.value;
+      els.savedDeviceSelect.innerHTML = mobileDevices.length
+        ? ['<option value="">Select a phone device</option>'].concat(
+            mobileDevices.map(device => `<option value="${device.id}">${escapeHtml(device.name)} (${escapeHtml(device.id)})</option>`)
+          ).join('')
+        : '<option value="">No saved phone devices yet</option>';
+
+      const selectedId = mobileDevices.some(device => device.id === previousSelection)
+        ? previousSelection
+        : (mobileDevices[0]?.id || '');
+      if (selectedId) {
+        els.savedDeviceSelect.value = selectedId;
+      }
+      renderSavedDeviceCard(selectedId);
+    }
+
+    function renderSavedDeviceCard(deviceId) {
+      const device = remoteDevices.find(item => item.id === deviceId);
+      if (!device) {
+        els.savedDeviceCard.innerHTML = '<div class="muted-copy">Select a saved phone device to see its share link, connection status, and one-click source setup.</div>';
+        return;
+      }
+
+      const mobileLink = `${window.location.origin}${device.mobile_url}`;
+      const statusClass = device.connected ? 'online' : 'offline';
+      const statusText = device.connected
+        ? `Phone connected${device.resolution ? ` • ${device.resolution.width}x${device.resolution.height}` : ''}`
+        : 'Waiting for phone browser to start sharing';
+
+      els.savedDeviceCard.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:start;">
+          <div>
+            <strong>${escapeHtml(device.name)}</strong>
+            <div class="muted-copy">Device ID: ${escapeHtml(device.id)}</div>
+          </div>
+          <div class="device-status ${statusClass}">${statusText}</div>
+        </div>
+        <div class="muted-copy">
+          Open this on the phone: <strong>${escapeHtml(mobileLink)}</strong><br>
+          Live source for this page: <strong>${escapeHtml(device.id)}</strong> or <strong>${escapeHtml(device.live_source)}</strong>
+        </div>
+        <div class="device-actions">
+          <button class="btnx secondary" type="button" onclick="window.open('${mobileLink}', '_blank')">Open Phone Link</button>
+          <button class="btnx secondary" type="button" onclick="window.copyRemoteValue('${mobileLink}')">Copy Phone Link</button>
+          <button class="btnx secondary" type="button" onclick="window.copyRemoteValue('${device.id}')">Copy Device ID</button>
+          <button class="btnx secondary" type="button" onclick="window.useSavedDevice('${device.id}')">Use On Live Source</button>
+        </div>
+      `;
     }
 
     function renderModelOptions(models, currentKey) {
@@ -436,6 +575,7 @@
 
       renderModelOptions(state.models || {}, state.current_model?.key);
       updateModelMeta(state.current_model || { label: 'Unknown', speed: '-', accuracy: '-', device: 'cpu', key: 'fast' });
+      renderSavedDevices(state.remote_devices || []);
 
       if (stats.last_snapshot) {
         els.snapshotImage.src = `/${stats.last_snapshot.replace(/^\/+/, '')}?t=${Date.now()}`;
@@ -534,6 +674,14 @@
     els.startBtn.addEventListener('click', startCamera);
     els.stopBtn.addEventListener('click', stopCamera);
     els.heatmapBtn.addEventListener('click', toggleHeatmap);
+    els.savedDeviceSelect.addEventListener('change', () => renderSavedDeviceCard(els.savedDeviceSelect.value));
+
+    window.copyRemoteValue = copyToClipboard;
+    window.useSavedDevice = selectRemoteDevice;
+
+    if (initialSource) {
+      els.cameraSource.value = initialSource;
+    }
 
     pollState();
     poller = setInterval(pollState, 1000);

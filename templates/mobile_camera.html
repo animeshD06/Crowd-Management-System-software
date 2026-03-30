@@ -53,6 +53,34 @@
       flex-wrap: wrap;
       margin-top: 16px;
     }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 16px;
+    }
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+    label {
+      color: #92aac8;
+      font-size: 13px;
+    }
+    select, .linkbox {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: #eef5ff;
+      padding: 12px 14px;
+      outline: none;
+    }
+    .linkbox {
+      word-break: break-all;
+      font-size: 14px;
+      line-height: 1.5;
+    }
     button {
       border: 0;
       border-radius: 14px;
@@ -70,6 +98,18 @@
       background: rgba(255,255,255,0.05);
       color: #d8e6fb;
     }
+    .hint {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(78,205,196,0.08);
+      color: #dffaf7;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -77,31 +117,77 @@
     <div class="eyebrow">Permission-Based Mobile Camera</div>
     <h1>{{ device.name }}</h1>
     <p>This page uses the phone camera only after the owner grants permission. Once started, frames are streamed to the server for live monitoring. Device ID: <strong>{{ device.id }}</strong></p>
+    <div class="linkbox" id="liveSourceBox">Live source for the monitoring page: {{ device.id }}</div>
+    <div class="grid">
+      <div class="field">
+        <label for="cameraFacing">Camera</label>
+        <select id="cameraFacing">
+          <option value="environment">Back camera</option>
+          <option value="user">Front camera</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="frameRate">Send quality</label>
+        <select id="frameRate">
+          <option value="350">Balanced (recommended)</option>
+          <option value="550">Battery saver</option>
+          <option value="220">Smoother stream</option>
+        </select>
+      </div>
+    </div>
     <video id="preview" autoplay muted playsinline></video>
     <div class="actions">
       <button id="startBtn">Start Camera Sharing</button>
       <button id="stopBtn" class="secondary" disabled>Stop Sharing</button>
+      <button id="copyIdBtn" class="secondary">Copy Device ID</button>
     </div>
     <div class="status" id="statusBox">Waiting to start.</div>
+    <div class="hint">
+      Keep this page open on the phone while streaming. On the computer, open the Live Monitor page, enter <strong>{{ device.id }}</strong> as the source or choose this saved phone device, then press Start.
+    </div>
   </main>
 
   <script>
     const deviceId = "{{ device.id }}";
+    const mobilePageUrl = `${window.location.origin}/mobile_camera/${deviceId}`;
     const preview = document.getElementById('preview');
     const statusBox = document.getElementById('statusBox');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
+    const copyIdBtn = document.getElementById('copyIdBtn');
+    const cameraFacing = document.getElementById('cameraFacing');
+    const frameRate = document.getElementById('frameRate');
 
     let stream = null;
     let timer = null;
     let canvas = document.createElement('canvas');
+    let statusTimer = null;
+    let isSending = false;
 
     function setStatus(message) {
       statusBox.textContent = message;
     }
 
+    function ensureSecureContext() {
+      if (window.isSecureContext) {
+        return true;
+      }
+      setStatus('Camera access is blocked on insecure HTTP. Open this page with HTTPS or through localhost on the same device.');
+      return false;
+    }
+
+    async function copyDeviceId() {
+      try {
+        await navigator.clipboard.writeText(deviceId);
+        setStatus(`Copied device ID: ${deviceId}`);
+      } catch (error) {
+        setStatus(`Copy failed. Use this ID manually: ${deviceId}`);
+      }
+    }
+
     async function sendFrame() {
-      if (!stream) return;
+      if (!stream || isSending) return;
+      isSending = true;
       const track = stream.getVideoTracks()[0];
       const settings = track.getSettings();
       canvas.width = settings.width || 640;
@@ -109,24 +195,60 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
 
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
-      const form = new FormData();
-      form.append('frame', blob, 'frame.jpg');
-      await fetch(`/api/mobile_frame/${deviceId}`, { method: 'POST', body: form });
+      try {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+        const form = new FormData();
+        form.append('frame', blob, 'frame.jpg');
+        const res = await fetch(`/api/mobile_frame/${deviceId}`, { method: 'POST', body: form });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error(payload.detail || 'Server rejected the frame');
+        }
+      } catch (error) {
+        setStatus(`Sending failed: ${error.message}`);
+      } finally {
+        isSending = false;
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch(`/api/mobile_frame/${deviceId}/status`);
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.detail || 'Status check failed');
+        if (stream) {
+          const resolution = payload.resolution ? ` at ${payload.resolution.width}x${payload.resolution.height}` : '';
+          setStatus(payload.connected
+            ? `Sharing live${resolution}. Frames sent: ${payload.frame_count}.`
+            : 'Phone camera is on, but the server is still waiting for fresh frames.');
+        }
+      } catch (error) {
+        if (stream) setStatus(`Status check failed: ${error.message}`);
+      }
     }
 
     async function startStreaming() {
       try {
+        if (!ensureSecureContext()) {
+          return;
+        }
+        stopStreaming();
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
+          video: {
+            facingMode: cameraFacing.value,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
           audio: false
         });
         preview.srcObject = stream;
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        setStatus('Camera active. Sending frames...');
+        setStatus(`Camera active. Sending frames to ${mobilePageUrl} ...`);
         await sendFrame();
-        timer = setInterval(sendFrame, 350);
+        timer = setInterval(sendFrame, Number(frameRate.value));
+        statusTimer = setInterval(refreshStatus, 1200);
+        refreshStatus();
       } catch (error) {
         setStatus(`Camera permission or access failed: ${error.message}`);
       }
@@ -135,6 +257,8 @@
     function stopStreaming() {
       if (timer) clearInterval(timer);
       timer = null;
+      if (statusTimer) clearInterval(statusTimer);
+      statusTimer = null;
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -147,6 +271,15 @@
 
     startBtn.addEventListener('click', startStreaming);
     stopBtn.addEventListener('click', stopStreaming);
+    copyIdBtn.addEventListener('click', copyDeviceId);
+    window.addEventListener('beforeunload', stopStreaming);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && stream) {
+        setStatus('This tab is in the background. Keep it open in front for the most reliable streaming.');
+      }
+    });
+
+    ensureSecureContext();
   </script>
 </body>
 </html>

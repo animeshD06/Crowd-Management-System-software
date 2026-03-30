@@ -216,6 +216,10 @@
       els.list.innerHTML = devices.map(device => {
         const liveSource = device.type === 'mobile' ? `mobile:${device.id}` : device.source;
         const mobileLink = device.type === 'mobile' ? `${window.location.origin}/mobile_camera/${device.id}` : '';
+        const livePageLink = `/live_camera?source=${encodeURIComponent(device.type === 'mobile' ? device.id : liveSource)}`;
+        const deviceStatus = device.type === 'mobile'
+          ? (device.connected ? 'Phone connected' : 'Waiting for phone')
+          : 'Saved remote source';
         return `
           <article class="device-card">
             <div class="device-head">
@@ -224,9 +228,11 @@
                 <div class="chips" style="margin-top:8px;">
                   <span class="chip"><i class="bi bi-key"></i>ID: ${escapeHtml(device.id)}</span>
                   <span class="chip"><i class="bi bi-camera-video"></i>${escapeHtml(device.type)}</span>
+                  <span class="chip"><i class="bi bi-broadcast-pin"></i>${escapeHtml(deviceStatus)}</span>
                 </div>
               </div>
               <div class="device-actions">
+                <a class="btnx secondary" href="${livePageLink}" style="text-decoration:none;">Open In Live Monitor</a>
                 <button class="btnx secondary" onclick="copyToClipboard('${liveSource}')">Copy Live Source</button>
                 ${device.type === 'mobile' ? `<button class="btnx secondary" onclick="copyToClipboard('${mobileLink}')">Copy Mobile Link</button>` : ''}
                 <button class="btnx secondary" onclick="deleteDevice('${device.id}')">Delete</button>

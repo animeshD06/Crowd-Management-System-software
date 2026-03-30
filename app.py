@@ -3,6 +3,8 @@ import os
 WORKSPACE_ROOT = os.path.dirname(os.path.abspath(__file__))
 LOCAL_CACHE_DIR = os.path.join(WORKSPACE_ROOT, ".runtime_cache")
 REMOTE_DEVICES_FILE = os.path.join(WORKSPACE_ROOT, "artifacts", "remote_devices.json")
+DEFAULT_SSL_CERTFILE = os.path.join(WORKSPACE_ROOT, "certs", "dev-cert.pem")
+DEFAULT_SSL_KEYFILE = os.path.join(WORKSPACE_ROOT, "certs", "dev-key.pem")
 os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(REMOTE_DEVICES_FILE), exist_ok=True)
 os.environ.setdefault("TORCH_HOME", os.path.join(LOCAL_CACHE_DIR, "torch"))
@@ -62,6 +64,8 @@ camera_stats = {
 }
 
 current_model_key = "fast"
+TARGET_CAMERA_FPS = 30
+TARGET_FRAME_TIME = 1.0 / TARGET_CAMERA_FPS
 
 MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024
 MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024
@@ -119,6 +123,24 @@ def validate_extension(filename: str, allowed_extensions: set[str], label: str) 
     return ext
 
 
+def get_server_runtime_options():
+    host = os.getenv("CMS_HOST", "127.0.0.1")
+    port = int(os.getenv("CMS_PORT", "8000"))
+    reload_enabled = os.getenv("CMS_RELOAD", "true").lower() == "true"
+
+    certfile = os.getenv("CMS_SSL_CERTFILE") or (DEFAULT_SSL_CERTFILE if os.path.exists(DEFAULT_SSL_CERTFILE) else None)
+    keyfile = os.getenv("CMS_SSL_KEYFILE") or (DEFAULT_SSL_KEYFILE if os.path.exists(DEFAULT_SSL_KEYFILE) else None)
+
+    ssl_enabled = bool(certfile and keyfile and os.path.exists(certfile) and os.path.exists(keyfile))
+    return {
+        "host": host,
+        "port": port,
+        "reload": reload_enabled,
+        "ssl_certfile": certfile if ssl_enabled else None,
+        "ssl_keyfile": keyfile if ssl_enabled else None,
+    }
+
+
 def parse_camera_source(source_value):
     if source_value is None or source_value == "":
         return 0, "Webcam 0"
@@ -149,6 +171,13 @@ def save_remote_devices(devices):
 def get_remote_devices():
     with remote_devices_lock:
         return load_remote_devices()
+
+
+def get_remote_device(device_id: str):
+    for device in get_remote_devices():
+        if device["id"] == device_id:
+            return device
+    return None
 
 
 def upsert_remote_device(device):
@@ -191,6 +220,31 @@ def get_mobile_frame(device_id):
         if not frame_info:
             return None, None
         return frame_info.get("frame"), frame_info.get("timestamp")
+
+
+def get_mobile_frame_info(device_id):
+    with mobile_frames_lock:
+        return mobile_frames.get(device_id)
+
+
+def build_remote_device_state(device):
+    mobile_info = get_mobile_frame_info(device["id"]) if device["type"] == "mobile" else None
+    last_frame_ts = mobile_info.get("timestamp") if mobile_info else None
+    connected = bool(last_frame_ts and (time.time() - last_frame_ts) < 5)
+    resolution = None
+    if mobile_info and mobile_info.get("frame") is not None:
+        frame = mobile_info["frame"]
+        resolution = {"width": int(frame.shape[1]), "height": int(frame.shape[0])}
+
+    return {
+        **device,
+        "live_source": f"mobile:{device['id']}" if device["type"] == "mobile" else device["source"],
+        "mobile_url": f"/mobile_camera/{device['id']}" if device["type"] == "mobile" else None,
+        "connected": connected,
+        "last_frame_ts": last_frame_ts,
+        "seconds_since_last_frame": round(time.time() - last_frame_ts, 2) if last_frame_ts else None,
+        "resolution": resolution,
+    }
 
 
 def reset_processing_status():
@@ -250,7 +304,7 @@ def get_system_state():
         "processing_status": processing_status,
         "models": yolo_infer.get_available_models(),
         "current_model": model_status,
-        "remote_devices": get_remote_devices(),
+        "remote_devices": [build_remote_device_state(device) for device in get_remote_devices()],
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -293,7 +347,7 @@ async def system_state():
 
 @app.get("/api/devices")
 async def list_devices():
-    return {"devices": get_remote_devices()}
+    return {"devices": [build_remote_device_state(device) for device in get_remote_devices()]}
 
 
 @app.post("/api/devices")
@@ -319,7 +373,7 @@ async def create_device(request: Request):
     upsert_remote_device(device)
     return {
         "message": "Device saved",
-        "device": device,
+        "device": build_remote_device_state(device),
         "mobile_url": f"/mobile_camera/{device['id']}" if device_type == "mobile" else None,
         "live_source": f"mobile:{device['id']}" if device_type == "mobile" else device["source"],
     }
@@ -333,6 +387,10 @@ async def delete_device(device_id: str):
 
 @app.post("/api/mobile_frame/{device_id}")
 async def ingest_mobile_frame(device_id: str, frame: UploadFile = File(...)):
+    device = get_remote_device(device_id)
+    if not device or device["type"] != "mobile":
+        raise HTTPException(status_code=404, detail="Mobile device not found")
+
     content = await frame.read()
     np_buffer = np.frombuffer(content, dtype=np.uint8)
     decoded = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
@@ -340,14 +398,38 @@ async def ingest_mobile_frame(device_id: str, frame: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid image frame")
 
     with mobile_frames_lock:
-        mobile_frames[device_id] = {"frame": decoded, "timestamp": time.time()}
-    return {"message": "Frame received"}
+        frame_count = int(mobile_frames.get(device_id, {}).get("frame_count", 0)) + 1
+        mobile_frames[device_id] = {
+            "frame": decoded,
+            "timestamp": time.time(),
+            "frame_count": frame_count,
+            "width": int(decoded.shape[1]),
+            "height": int(decoded.shape[0]),
+        }
+    return {"message": "Frame received", "frame_count": frame_count}
 
 
 @app.get("/api/mobile_frame/{device_id}/status")
 async def mobile_frame_status(device_id: str):
-    _, timestamp = get_mobile_frame(device_id)
-    return {"connected": timestamp is not None and (time.time() - timestamp) < 5, "last_frame_ts": timestamp}
+    device = get_remote_device(device_id)
+    if not device or device["type"] != "mobile":
+        raise HTTPException(status_code=404, detail="Mobile device not found")
+
+    info = get_mobile_frame_info(device_id)
+    timestamp = info.get("timestamp") if info else None
+    connected = timestamp is not None and (time.time() - timestamp) < 5
+    return {
+        "device_id": device_id,
+        "device_name": device["name"],
+        "connected": connected,
+        "last_frame_ts": timestamp,
+        "seconds_since_last_frame": round(time.time() - timestamp, 2) if timestamp else None,
+        "frame_count": int(info.get("frame_count", 0)) if info else 0,
+        "resolution": {
+            "width": int(info.get("width", 0)),
+            "height": int(info.get("height", 0)),
+        } if info else None,
+    }
 
 
 @app.post("/set_model")
@@ -411,6 +493,7 @@ def camera_feed():
     def generate():
         global current_camera_frame, frame_lock
         while camera_active:
+            loop_started_at = time.time()
             with frame_lock:
                 if current_camera_frame is not None:
                     try:
@@ -431,8 +514,10 @@ def camera_feed():
                         yield (b'--frame\r\n'
                                b'Content-Type: image/jpeg\r\n\r\n' + 
                                buffer.tobytes() + b'\r\n')
-            
-            time.sleep(0.04)
+
+            elapsed = time.time() - loop_started_at
+            if elapsed < TARGET_FRAME_TIME:
+                time.sleep(TARGET_FRAME_TIME - elapsed)
 
     return StreamingResponse(generate(),
                            media_type="multipart/x-mixed-replace; boundary=frame")
@@ -480,7 +565,7 @@ def run_camera_processing():
             camera_active = False
             return
 
-        cap.set(cv2.CAP_PROP_FPS, 25)
+        cap.set(cv2.CAP_PROP_FPS, TARGET_CAMERA_FPS)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     print("Camera processing started with YOLO model")
@@ -498,6 +583,7 @@ def run_camera_processing():
     camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
 
     while camera_active:
+        loop_started_at = time.time()
         if mobile_device_id:
             mobile_frame, frame_timestamp = get_mobile_frame(mobile_device_id)
             if mobile_frame is None or frame_timestamp is None or (time.time() - frame_timestamp) > 5:
@@ -623,8 +709,10 @@ def run_camera_processing():
             camera_stats["last_error"] = str(e)
             with frame_lock:
                 current_camera_frame = frame
-        
-        time.sleep(0.04)
+
+        elapsed = time.time() - loop_started_at
+        if elapsed < TARGET_FRAME_TIME:
+            time.sleep(TARGET_FRAME_TIME - elapsed)
 
     if cap is not None:
         cap.release()
@@ -1164,4 +1252,12 @@ def process_video_batch(video_path, processed_path, personal_space, scale_factor
     }
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    runtime_options = get_server_runtime_options()
+    uvicorn.run(
+        "app:app",
+        host=runtime_options["host"],
+        port=runtime_options["port"],
+        reload=runtime_options["reload"],
+        ssl_certfile=runtime_options["ssl_certfile"],
+        ssl_keyfile=runtime_options["ssl_keyfile"],
+    )

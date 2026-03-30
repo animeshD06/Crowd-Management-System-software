@@ -151,6 +151,87 @@ CMS is an advanced crowd management platform designed to enhance safety, efficie
 
 ---
 
+## HTTPS For Mobile Camera Access
+
+Phone browsers typically require a secure context before they allow camera access. That means the mobile broadcaster page should be opened through `https://...` instead of plain `http://...` when the phone is connecting to your laptop over Wi-Fi.
+
+### Generate local certificates
+
+The project includes a local certificate generator:
+
+```powershell
+python .\scripts\generate_dev_cert.py
+```
+
+That creates these files locally:
+
+```text
+certs/dev-ca.pem
+certs/dev-ca-key.pem
+certs/dev-cert.pem
+certs/dev-key.pem
+```
+
+The generated server certificate includes `localhost`, `127.0.0.1`, and your detected local IPv4 addresses.
+
+### Runtime support
+
+The app now supports these environment variables:
+
+```powershell
+$env:CMS_HOST = "0.0.0.0"
+$env:CMS_PORT = "8000"
+$env:CMS_SSL_CERTFILE = "C:\path\to\dev-cert.pem"
+$env:CMS_SSL_KEYFILE = "C:\path\to\dev-key.pem"
+python app.py
+```
+
+If both certificate files exist, the FastAPI server starts with HTTPS enabled.
+
+### Convenience launcher
+
+You can start the app with:
+
+```powershell
+.\start_https.ps1
+```
+
+If `certs/dev-cert.pem` and `certs/dev-key.pem` do not exist yet, the script generates them automatically.
+
+### LAN access from phone
+
+1. Start the app with HTTPS enabled.
+2. Find your laptop's Wi-Fi IP address using `ipconfig`.
+3. On the phone, open:
+
+```text
+https://<your-laptop-ip>:8000
+```
+
+4. Add a `Mobile camera with permission` device.
+5. Open the generated `/mobile_camera/<device_id>` link on the phone.
+6. Tap `Start Camera Sharing`.
+
+### Trust the local CA on the phone
+
+The browser may still block camera access until the phone trusts `certs/dev-ca.pem`.
+
+General workflow:
+
+1. Copy `certs/dev-ca.pem` to the phone.
+2. Install that certificate on the phone.
+3. Mark it as trusted for VPN/apps or local certificates if the phone asks.
+4. Reopen the HTTPS URL for the app.
+
+Notes:
+
+- Android often requires you to install the certificate from Settings before Chrome will accept it.
+- iPhone/iPad usually requires both installing the profile and enabling trust for it in certificate trust settings.
+
+If the browser still refuses camera access after that, use a tunnel or a publicly trusted HTTPS endpoint instead.
+
+---
+
 ## Usage
 
 -   Upload your video file or configure a live camera feed (if supported by your `app.py`).

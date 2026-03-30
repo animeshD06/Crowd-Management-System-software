@@ -30,6 +30,9 @@ runs/
 # Cache files
 *.cache
 
+# Local HTTPS development certificates
+certs/
+
 # Large dataset (download separately)
 dataset/images/
 
