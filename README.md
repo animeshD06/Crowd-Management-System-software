@@ -92,19 +92,20 @@ CMS is an advanced crowd management platform designed to enhance safety, efficie
     ```
     *(This will create a virtual environment. Activate it if not automatically activated. On Windows: `.venv\Scripts\activate`, on macOS/Linux: `source .venv/bin/activate`)*
 
-    1.2. Install dependencies from `requirements.txt`:
+    1.2. Install dependencies once, choosing either CPU or CUDA:
     ```
-    uv add -r .\requirements.txt
+    uv venv --python 3.10
+    uv pip install -r .\requirements-cpu.txt
     ```
-    *(Ensure your virtual environment is activated before running this command.)*
+    *(Use `requirements-cpu.txt` for the default CPU setup. `requirements.txt` points to the same CPU install for backwards compatibility.)*
 
     1.3. **For running on CUDA (Optional):**  
-    If you have an NVIDIA GPU and want to leverage CUDA for faster processing, first uninstall the CPU-only PyTorch versions and then install the CUDA-enabled versions.
+    If you have an NVIDIA GPU, install the CUDA-specific requirements directly instead of installing CPU packages first:
     ```
-    uv pip uninstall torch torchvision torchaudio
-    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    uv venv --python 3.10
+    uv pip install -r .\requirements-cuda.txt
     ```
-    *(Adjust `cu121` to your specific CUDA version if needed. Check PyTorch official website for correct wheels.)*
+    *(Adjust the `cu121` index in `requirements-cuda.txt` if your CUDA version differs.)*
 
     1.4. **To Run the Server (using Uvicorn, common for FastAPI/Starlette apps):**
     ```
@@ -126,25 +127,53 @@ CMS is an advanced crowd management platform designed to enhance safety, efficie
         source .venv/bin/activate
         ```
 
-    2.2. Install dependencies from `requirements.txt`:
+    2.2. Install dependencies once, choosing either CPU or CUDA:
     ```
-    pip install -r .\requirements.txt
+    pip install -r .\requirements-cpu.txt
     ```
-    *(Ensure your virtual environment is activated.)*
+    *(Use `requirements-cpu.txt` for the default CPU setup. `requirements.txt` points to the same CPU install for backwards compatibility.)*
 
     2.3. **For running on CUDA (Optional):**  
-    If you have an NVIDIA GPU and want to leverage CUDA:
+    If you have an NVIDIA GPU, install the CUDA-specific requirements directly instead of installing CPU packages first:
     ```
-    pip uninstall torch torchvision torchaudio
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    pip install -r .\requirements-cuda.txt
     ```
-    *(Adjust `cu121` as needed.)*
+    *(Adjust the `cu121` index in `requirements-cuda.txt` if needed.)*
 
     2.4. **To Run the Server (e.g., for Flask or basic Python scripts):**
     ```
     python app.py
     ```
     *(If `app.py` is your main application file. For Flask, this typically starts a development server.)*
+
+### One-command startup
+
+For a professional local workflow on Windows, use the included launcher:
+
+```powershell
+.\run.ps1
+```
+
+What it does:
+
+- creates `.venv` if it does not exist
+- installs pinned CPU dependencies only when the selected requirements file changes
+- starts the app on `http://127.0.0.1:8000`
+
+Useful variants:
+
+```powershell
+.\run.ps1 -UseHttps -Host 0.0.0.0
+.\run.ps1 -Cuda
+.\run.ps1 -Reload
+.\run.ps1 -SkipInstall
+```
+
+`start_https.ps1` now uses the same launcher internally:
+
+```powershell
+.\start_https.ps1
+```
 
 3.  **Access the dashboard:**  
     Open your browser and go to `http://localhost:8000` (for Uvicorn default) or `http://localhost:5000` (common Flask default), or the port specified by your application.

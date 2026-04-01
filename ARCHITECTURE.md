@@ -200,23 +200,14 @@ Detection Results → Rolling Average Smoothing → Density Classification → A
 - **Nginx**: Reverse proxy and load balancing
 - **Redis**: Caching and session management (optional)
 
-### Dependencies (requirements.txt)
+### Dependencies
 ```
-torch>=2.7.1
-torchvision>=0.22.1
-torchaudio>=2.7.1
-ultralytics>=8.3.150
-opencv-python==4.7.0.72
-numpy<2.0
-matplotlib>=3.10.3
-fastapi>=0.115.12
-uvicorn>=0.34.3
-jinja2>=3.1.6
-python-multipart>=0.0.20
-deep-sort-realtime>=1.3.2
-scikit-learn>=1.6.1
-setuptools>=80.9.0
+requirements-base.txt
+requirements-cpu.txt
+requirements-cuda.txt
 ```
+
+`requirements-base.txt` contains the shared web/computer-vision dependencies. `requirements-cpu.txt` adds the default CPU PyTorch stack, and `requirements-cuda.txt` points PyTorch installs at the CUDA wheel index to avoid install-then-reinstall workflows.
 
 ## AI/ML Pipeline
 

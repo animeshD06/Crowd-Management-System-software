@@ -168,7 +168,7 @@
           <a class="btnx secondary" href="/live_camera" style="text-decoration:none;"><i class="bi bi-broadcast-pin me-1"></i>Open Live Monitor</a>
           <a class="btnx secondary" href="/" style="text-decoration:none;"><i class="bi bi-house me-1"></i>Dashboard</a>
         </div>
-        <div class="hint" id="deviceHint">For mobile cameras, saving the device generates a sharable broadcaster link. The phone owner opens it, grants access, and the stream becomes available as a remote source.</div>
+        <div class="hint" id="deviceHint">For mobile cameras, saving the device generates a sharable broadcaster link. Start the server with HTTPS on your laptop network, then the phone owner opens that link, grants access, and the stream becomes available as a remote source.</div>
       </div>
 
       <div class="panel">
@@ -198,7 +198,7 @@
       const isMobile = els.type.value === 'mobile';
       els.sourceField.style.display = isMobile ? 'none' : 'grid';
       els.hint.textContent = isMobile
-        ? 'Saving this device generates a mobile broadcaster link. Share it only with a person who has given permission to use their phone camera.'
+        ? 'Saving this device generates a mobile broadcaster link. Share it only with a person who has given permission to use their phone camera, and run the server with HTTPS so the phone browser can access the camera.'
         : 'For CCTV/IP cameras, enter the RTSP, HTTP, or MJPEG source URL that OpenCV can open.';
     }
 
