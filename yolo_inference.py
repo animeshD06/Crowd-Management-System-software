@@ -24,7 +24,7 @@ CROWD_THRESHOLD = 30  # For Discord alerts (overall count threshold)
 ALERT_DELAY = 15  # Minimum seconds between alerts
 MOTION_THRESHOLD = 5000  # For background subtraction
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-SNAPSHOT_FOLDER = "snapshots"
+SNAPSHOT_FOLDER = os.path.join(WORKSPACE_ROOT, "snapshots")
 os.makedirs(SNAPSHOT_FOLDER, exist_ok=True)
 
 ROLLING_WINDOW = 30  # For smoothing crowd count

@@ -481,9 +481,15 @@
       const device = remoteDevices.find(item => item.id === deviceId);
       if (!device) {
         els.cameraSource.value = '';
+        els.savedDeviceSelect.value = '';
+        renderSavedDeviceCard('');
         return;
       }
       els.cameraSource.value = device.type === 'mobile' ? device.id : (device.live_source || device.source || '');
+      if (device.type === 'mobile') {
+        els.savedDeviceSelect.value = device.id;
+        renderSavedDeviceCard(device.id);
+      }
       toast('info', 'Source ready', `${device.name} has been loaded into the source field.`);
     }
 
@@ -497,9 +503,12 @@
           ).join('')
         : '<option value="">No saved phone devices yet</option>';
 
+      const requestedSelection = mobileDevices.find(device =>
+        device.id === initialSource || device.live_source === initialSource
+      )?.id;
       const selectedId = mobileDevices.some(device => device.id === previousSelection)
         ? previousSelection
-        : (mobileDevices[0]?.id || '');
+        : (requestedSelection || mobileDevices[0]?.id || '');
       if (selectedId) {
         els.savedDeviceSelect.value = selectedId;
       }
@@ -516,7 +525,7 @@
       const mobileLink = `${window.location.origin}${device.mobile_url}`;
       const statusClass = device.connected ? 'online' : 'offline';
       const statusText = device.connected
-        ? `Phone connected${device.resolution ? ` • ${device.resolution.width}x${device.resolution.height}` : ''}`
+        ? `Phone connected${device.resolution ? ` | ${device.resolution.width}x${device.resolution.height}` : ''}`
         : 'Waiting for phone browser to start sharing';
 
       els.savedDeviceCard.innerHTML = `
@@ -543,7 +552,7 @@
     function renderModelOptions(models, currentKey) {
       const options = Object.values(models).map(model => {
         const selected = model.key === currentKey ? 'selected' : '';
-        return `<option value="${model.key}" ${selected}>${model.label} · ${model.speed} · ${model.accuracy}</option>`;
+        return `<option value="${model.key}" ${selected}>${model.label} | ${model.speed} | ${model.accuracy}</option>`;
       }).join('');
       els.modelSelect.innerHTML = options;
     }
@@ -688,3 +697,4 @@
   </script>
 </body>
 </html>
+

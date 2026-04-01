@@ -452,7 +452,7 @@
 
     async function setZoomCell(row, col) {
       await fetch(`/set_zoom?row=${row}&col=${col}`);
-      els.zoomTitle.textContent = `Zoom Cell · Row ${row + 1}, Col ${col + 1}`;
+      els.zoomTitle.textContent = `Zoom Cell | Row ${row + 1}, Col ${col + 1}`;
       els.zoomFeed.src = `/zoom_feed?t=${Date.now()}`;
       els.zoomModal.classList.add('active');
     }
@@ -478,3 +478,4 @@
   </script>
 </body>
 </html>
+

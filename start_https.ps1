@@ -3,13 +3,13 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $certFile = Join-Path $projectRoot "certs\dev-cert.pem"
 $keyFile = Join-Path $projectRoot "certs\dev-key.pem"
-$python311 = "C:\Users\hp\AppData\Local\Programs\Python\Python311\python.exe"
 $venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$python311 = "C:\Users\hp\AppData\Local\Programs\Python\Python311\python.exe"
 
-if (Test-Path $python311) {
-    $pythonCmd = $python311
-} elseif (Test-Path $venvPython) {
+if (Test-Path $venvPython) {
     $pythonCmd = $venvPython
+} elseif (Test-Path $python311) {
+    $pythonCmd = $python311
 } else {
     $pythonCmd = "python"
 }
@@ -25,6 +25,7 @@ if (-not (Test-Path $certFile) -or -not (Test-Path $keyFile)) {
 
 $env:CMS_HOST = "0.0.0.0"
 $env:CMS_PORT = "8000"
+$env:CMS_RELOAD = "false"
 $env:CMS_SSL_CERTFILE = $certFile
 $env:CMS_SSL_KEYFILE = $keyFile
 

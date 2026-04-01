@@ -4,22 +4,38 @@ import numpy as np
 from skimage import measure
 import os
 
-# Load MiDaS model globally
-print("Loading MiDaS model...")
-try:
-    model_type = "MiDaS_small"
-    midas = torch.hub.load("intel-isl/MiDaS", model_type, trust_repo=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    midas.to(device)
-    midas.eval()
+midas = None
+transform = None
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_midas_load_attempted = False
 
-    midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms", trust_repo=True)
-    transform = midas_transforms.small_transform
-    print("MiDaS model loaded successfully")
-except Exception as e:
-    print(f"Failed to load MiDaS model: {e}")
-    midas = None
-    transform = None
+
+def ensure_midas_loaded() -> None:
+    """Load MiDaS only when room-capacity estimation is requested."""
+    global midas, transform, _midas_load_attempted
+
+    if midas is not None and transform is not None:
+        return
+    if _midas_load_attempted:
+        raise RuntimeError("MiDaS model not loaded")
+
+    _midas_load_attempted = True
+    print("Loading MiDaS model...")
+    try:
+        model_type = "MiDaS_small"
+        midas_model = torch.hub.load("intel-isl/MiDaS", model_type, trust_repo=True)
+        midas_model.to(device)
+        midas_model.eval()
+
+        midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms", trust_repo=True)
+        midas = midas_model
+        transform = midas_transforms.small_transform
+        print("MiDaS model loaded successfully")
+    except Exception as exc:
+        print(f"Failed to load MiDaS model: {exc}")
+        midas = None
+        transform = None
+        raise RuntimeError("MiDaS model not loaded") from exc
 
 def estimate_room_capacity(image_path: str) -> dict:
     """
@@ -32,8 +48,7 @@ def estimate_room_capacity(image_path: str) -> dict:
         dict: Contains 'estimated_area' (float), 'maximum_people' (int),
               'depth_map_path' (str), 'floor_overlay_path' (str).
     """
-    if midas is None or transform is None:
-        raise RuntimeError("MiDaS model not loaded")
+    ensure_midas_loaded()
 
     # Load and preprocess image
     img = cv2.imread(image_path)

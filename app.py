@@ -15,7 +15,6 @@ from fastapi import FastAPI, Request, File, UploadFile, HTTPException, Query
 from yolo_inference import YOLOInference, PIXELS_PER_SQM
 import cv2
 import threading
-import uvicorn
 import numpy as np
 import time
 import json
@@ -90,18 +89,21 @@ mobile_frames_lock = threading.Lock()
 mobile_frames = {}
 
 # Setup directories
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
-PROCESSED_FOLDER = os.path.join('static', 'processed')
+STATIC_DIR = os.path.join(WORKSPACE_ROOT, "static")
+TEMPLATES_DIR = os.path.join(WORKSPACE_ROOT, "templates")
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
+PROCESSED_FOLDER = os.path.join(STATIC_DIR, "processed")
+SNAPSHOTS_DIR = os.path.join(WORKSPACE_ROOT, "snapshots")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PROCESSED_FOLDER, exist_ok=True)
-os.makedirs("snapshots", exist_ok=True)
+os.makedirs(SNAPSHOTS_DIR, exist_ok=True)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Setup templates
-templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "templates"))
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Initialize YOLO with optimized parameters for better accuracy
 model_path = 'yolov8n.pt'
@@ -126,7 +128,7 @@ def validate_extension(filename: str, allowed_extensions: set[str], label: str) 
 def get_server_runtime_options():
     host = os.getenv("CMS_HOST", "127.0.0.1")
     port = int(os.getenv("CMS_PORT", "8000"))
-    reload_enabled = os.getenv("CMS_RELOAD", "true").lower() == "true"
+    reload_enabled = os.getenv("CMS_RELOAD", "false").lower() == "true"
 
     certfile = os.getenv("CMS_SSL_CERTFILE") or (DEFAULT_SSL_CERTFILE if os.path.exists(DEFAULT_SSL_CERTFILE) else None)
     keyfile = os.getenv("CMS_SSL_KEYFILE") or (DEFAULT_SSL_KEYFILE if os.path.exists(DEFAULT_SSL_KEYFILE) else None)
@@ -197,6 +199,8 @@ def remove_remote_device(device_id):
     with remote_devices_lock:
         devices = [device for device in load_remote_devices() if device["id"] != device_id]
         save_remote_devices(devices)
+    with mobile_frames_lock:
+        mobile_frames.pop(device_id, None)
 
 
 def build_source_from_device(device):
@@ -309,7 +313,7 @@ def get_system_state():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -323,12 +327,12 @@ async def toggle_heatmap():
 
 @app.get("/live_camera", response_class=HTMLResponse)
 async def live_camera(request: Request):
-    return templates.TemplateResponse("live_camera_v2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="live_camera_v2.html")
 
 
 @app.get("/remote_devices", response_class=HTMLResponse)
 async def remote_devices_page(request: Request):
-    return templates.TemplateResponse("remote_devices.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="remote_devices.html")
 
 
 @app.get("/mobile_camera/{device_id}", response_class=HTMLResponse)
@@ -337,7 +341,7 @@ async def mobile_camera_page(request: Request, device_id: str):
     device = next((item for item in devices if item["id"] == device_id and item["type"] == "mobile"), None)
     if not device:
         raise HTTPException(status_code=404, detail="Mobile device not found")
-    return templates.TemplateResponse("mobile_camera.html", {"request": request, "device": device})
+    return templates.TemplateResponse(request=request, name="mobile_camera.html", context={"device": device})
 
 
 @app.get("/system_state")
@@ -539,7 +543,7 @@ async def get_processing_status():
 
 def run_camera_processing():
     """FIXED: Run camera processing with real YOLO model"""
-    global current_camera_frame, camera_stats, camera_active, frame_lock
+    global current_camera_frame, camera_stats, camera_active, camera_thread, frame_lock
 
     try:
         yolo_infer.load_model(model_key=current_model_key)
@@ -582,142 +586,127 @@ def run_camera_processing():
     camera_stats["source"] = camera_source_label
     camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
 
-    while camera_active:
-        loop_started_at = time.time()
-        if mobile_device_id:
-            mobile_frame, frame_timestamp = get_mobile_frame(mobile_device_id)
-            if mobile_frame is None or frame_timestamp is None or (time.time() - frame_timestamp) > 5:
-                placeholder = np.zeros((480, 800, 3), dtype=np.uint8)
-                cv2.putText(placeholder, "Waiting for mobile camera connection...", (80, 210),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-                cv2.putText(placeholder, "Open the mobile broadcaster page and allow camera access.", (55, 255),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 220, 255), 2)
-                with frame_lock:
-                    current_camera_frame = placeholder
-                camera_stats["last_error"] = "Waiting for mobile device frames"
-                time.sleep(0.08)
-                continue
-            frame = mobile_frame.copy()
-        else:
-            ret, frame = cap.read()
-            if not ret:
-                print("Error: Could not read from camera")
-                camera_stats["last_error"] = f"Could not read from source: {camera_source_label}"
-                break
-
-        try:
-            height, width = frame.shape[:2]
-
-            # Initialize density map if not exists or wrong size
-            if yolo_infer.density_map is None or yolo_infer.density_map.shape[:2] != (height, width):
-                yolo_infer.density_map = np.zeros((height, width), dtype=np.float32)
-
-            # Frame skipping for higher FPS - process every FRAME_SKIP_RATE frames
-            frame_skip_counter += 1
-            process_frame = (frame_skip_counter % FRAME_SKIP_RATE == 0)
-
-            people_count = 0  # Initialize people_count
-            detections = []
-
-            if process_frame and model is not None:
-                # Run YOLO inference with optimized parameters for better accuracy
-                results = model(frame, conf=0.35, device=yolo_infer.device, verbose=False, imgsz=640, max_det=100, iou=0.45)
-
-                # Process YOLO results
-                for result in results:
-                    if result.boxes is not None:
-                        for box in result.boxes.data.cpu().numpy():
-                            x1, y1, x2, y2, conf, class_id = box
-
-                            # Check if detected object is a person (class_id = 0 in COCO dataset)
-                            if int(class_id) == 0:  # Person class
-                                people_count += 1
-                                w, h = x2 - x1, y2 - y1
-                                detections.append(([x1, y1, w, h], conf, "person"))
-
-                                # Update density map for this person
-                                cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
-                                if 0 <= cx < width and 0 <= cy < height:
-                                    cv2.circle(yolo_infer.density_map, (cx, cy), 25, (1.0,), thickness=-1)
-
-                                # Draw bounding box around detected person
-                                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-
-                                # Add person label with confidence
-                                label = f'Person {conf:.2f}'
-                                cv2.putText(frame, label, (int(x1), int(y1) - 10),
-                                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-                # Estimate area if not user-provided and detections available
-                if not user_provided_area and estimated_camera_area is None and detections:
-                    estimated_camera_area = yolo_infer.estimate_area_from_detections(width, height, detections)
-                    print(f"[INFO] Estimated camera area from detections: {estimated_camera_area} sqm")
-
-                # Update last detection results
-                last_people_count = people_count
+    try:
+        while camera_active:
+            loop_started_at = time.time()
+            if mobile_device_id:
+                mobile_frame, frame_timestamp = get_mobile_frame(mobile_device_id)
+                if mobile_frame is None or frame_timestamp is None or (time.time() - frame_timestamp) > 5:
+                    placeholder = np.zeros((480, 800, 3), dtype=np.uint8)
+                    cv2.putText(placeholder, "Waiting for mobile camera connection...", (80, 210),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                    cv2.putText(placeholder, "Open the mobile broadcaster page and allow camera access.", (55, 255),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 220, 255), 2)
+                    with frame_lock:
+                        current_camera_frame = placeholder
+                    camera_stats["last_error"] = "Waiting for mobile device frames"
+                    time.sleep(0.08)
+                    continue
+                frame = mobile_frame.copy()
             else:
-                # Use last detection results for skipped frames
-                people_count = last_people_count
+                ret, frame = cap.read()
+                if not ret:
+                    print("Error: Could not read from camera")
+                    camera_stats["last_error"] = f"Could not read from source: {camera_source_label}"
+                    break
 
-            # Implement smoothing
-            crowd_counts.append(people_count)
-            if len(crowd_counts) > 30:
-                crowd_counts.pop(0)
-            smoothed_count = int(sum(crowd_counts) / len(crowd_counts)) if crowd_counts else 0
+            try:
+                height, width = frame.shape[:2]
 
-            # Calculate density based on area
-            area_for_density = camera_area_sqm if user_provided_area else (estimated_camera_area if estimated_camera_area else camera_area_sqm)
-            density = smoothed_count / area_for_density if area_for_density > 0 else 0
+                if yolo_infer.density_map is None or yolo_infer.density_map.shape[:2] != (height, width):
+                    yolo_infer.density_map = np.zeros((height, width), dtype=np.float32)
 
-            # Enhanced pulsing red live indicator
-            pulse_timer += 1
-            pulse_intensity = int(128 + 127 * np.sin(pulse_timer * 0.2))
+                frame_skip_counter += 1
+                process_frame = (frame_skip_counter % FRAME_SKIP_RATE == 0)
 
-            # Draw pulsing red dot
-            cv2.circle(frame, (20, height - 20), 10, (0, 0, pulse_intensity), -1)
-            cv2.circle(frame, (20, height - 20), 10, (255, 255, 255), 2)
-            cv2.putText(frame, "LIVE", (38, height - 15),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                people_count = 0
+                detections = []
 
-            # Draw overlays
-            frame = yolo_infer._draw_overlays(frame, smoothed_count, density)
+                if process_frame and model is not None:
+                    results = model(frame, conf=0.35, device=yolo_infer.device, verbose=False, imgsz=640, max_det=100, iou=0.45)
 
-            # Update stats with real detection data
-            camera_stats["people_count"] = smoothed_count
-            camera_stats["density"] = round(density, 3)
-            camera_stats["density_level"] = yolo_infer.get_density_level(density)
-            camera_stats["alert_status"] = yolo_infer.get_alert_status(density, smoothed_count)
-            camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
+                    for result in results:
+                        if result.boxes is not None:
+                            for box in result.boxes.data.cpu().numpy():
+                                x1, y1, x2, y2, conf, class_id = box
 
-            alert_event = yolo_infer.handle_alert(frame, density, smoothed_count, source_label=camera_source_label)
-            if alert_event:
-                camera_stats["last_snapshot"] = alert_event["snapshot_path"].replace("\\", "/")
-                camera_stats["alert_status"] = alert_event["status"]
-            
-            # Calculate FPS
-            fps_counter += 1
-            if time.time() - fps_start_time >= 1.0:
-                camera_stats["fps"] = fps_counter
-                fps_counter = 0
-                fps_start_time = time.time()
-            
-            with frame_lock:
-                current_camera_frame = frame.copy()
-            
-        except Exception as e:
-            print(f"Error processing frame: {e}")
-            camera_stats["last_error"] = str(e)
-            with frame_lock:
-                current_camera_frame = frame
+                                if int(class_id) == 0:
+                                    people_count += 1
+                                    w, h = x2 - x1, y2 - y1
+                                    detections.append(([x1, y1, w, h], conf, "person"))
 
-        elapsed = time.time() - loop_started_at
-        if elapsed < TARGET_FRAME_TIME:
-            time.sleep(TARGET_FRAME_TIME - elapsed)
+                                    cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+                                    if 0 <= cx < width and 0 <= cy < height:
+                                        cv2.circle(yolo_infer.density_map, (cx, cy), 25, (1.0,), thickness=-1)
 
-    if cap is not None:
-        cap.release()
-    camera_stats["fps"] = 0
-    print("Camera processing stopped")
+                                    cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                                    label = f"Person {conf:.2f}"
+                                    cv2.putText(frame, label, (int(x1), int(y1) - 10),
+                                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+                    if not user_provided_area and estimated_camera_area is None and detections:
+                        estimated_camera_area = yolo_infer.estimate_area_from_detections(width, height, detections)
+                        print(f"[INFO] Estimated camera area from detections: {estimated_camera_area} sqm")
+
+                    last_people_count = people_count
+                else:
+                    people_count = last_people_count
+
+                crowd_counts.append(people_count)
+                if len(crowd_counts) > 30:
+                    crowd_counts.pop(0)
+                smoothed_count = int(sum(crowd_counts) / len(crowd_counts)) if crowd_counts else 0
+
+                area_for_density = camera_area_sqm if user_provided_area else (estimated_camera_area if estimated_camera_area else camera_area_sqm)
+                density = smoothed_count / area_for_density if area_for_density > 0 else 0
+
+                pulse_timer += 1
+                pulse_intensity = int(128 + 127 * np.sin(pulse_timer * 0.2))
+
+                cv2.circle(frame, (20, height - 20), 10, (0, 0, pulse_intensity), -1)
+                cv2.circle(frame, (20, height - 20), 10, (255, 255, 255), 2)
+                cv2.putText(frame, "LIVE", (38, height - 15),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+                frame = yolo_infer._draw_overlays(frame, smoothed_count, density)
+
+                camera_stats["people_count"] = smoothed_count
+                camera_stats["density"] = round(density, 3)
+                camera_stats["density_level"] = yolo_infer.get_density_level(density)
+                camera_stats["alert_status"] = yolo_infer.get_alert_status(density, smoothed_count)
+                camera_stats["heatmap_enabled"] = yolo_infer.enable_heat_map
+                camera_stats["last_error"] = None
+
+                alert_event = yolo_infer.handle_alert(frame, density, smoothed_count, source_label=camera_source_label)
+                if alert_event:
+                    camera_stats["last_snapshot"] = alert_event["snapshot_path"].replace("\\", "/")
+                    camera_stats["alert_status"] = alert_event["status"]
+
+                fps_counter += 1
+                if time.time() - fps_start_time >= 1.0:
+                    camera_stats["fps"] = fps_counter
+                    fps_counter = 0
+                    fps_start_time = time.time()
+
+                with frame_lock:
+                    current_camera_frame = frame.copy()
+
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                camera_stats["last_error"] = str(e)
+                with frame_lock:
+                    current_camera_frame = frame
+
+            elapsed = time.time() - loop_started_at
+            if elapsed < TARGET_FRAME_TIME:
+                time.sleep(TARGET_FRAME_TIME - elapsed)
+    finally:
+        if cap is not None:
+            cap.release()
+        camera_active = False
+        camera_thread = None
+        camera_stats["fps"] = 0
+        print("Camera processing stopped")
 
 @app.post("/upload")
 async def upload(video: UploadFile = File(...)):
@@ -971,7 +960,7 @@ def draw_region_on_image(frame, region_info):
 
 @app.get("/live_preview", response_class=HTMLResponse)
 async def live_preview(request: Request):
-    return templates.TemplateResponse("live_preview_v2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="live_preview_v2.html")
 
 @app.get("/video_feed")
 async def video_feed():
@@ -1253,8 +1242,9 @@ def process_video_batch(video_path, processed_path, personal_space, scale_factor
 
 if __name__ == "__main__":
     runtime_options = get_server_runtime_options()
+    app_target = "app:app" if runtime_options["reload"] else app
     uvicorn.run(
-        "app:app",
+        app_target,
         host=runtime_options["host"],
         port=runtime_options["port"],
         reload=runtime_options["reload"],

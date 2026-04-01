@@ -16,6 +16,7 @@ if (-not (Test-Path $certFile) -or -not (Test-Path $keyFile)) {
 
 $env:CMS_HOST = "0.0.0.0"
 $env:CMS_PORT = "8000"
+$env:CMS_RELOAD = "false"
 $env:CMS_SSL_CERTFILE = $certFile
 $env:CMS_SSL_KEYFILE = $keyFile
 
