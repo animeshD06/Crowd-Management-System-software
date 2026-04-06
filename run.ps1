@@ -85,6 +85,41 @@ function Test-PortAvailable {
     }
 }
 
+function Get-BrowserUrls {
+    param(
+        [Parameter(Mandatory = $true)][string]$Scheme,
+        [Parameter(Mandatory = $true)][string]$BindHost,
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+
+    $urls = [System.Collections.Generic.List[string]]::new()
+
+    if ($BindHost -eq "0.0.0.0") {
+        $urls.Add("${Scheme}://localhost:$Port")
+
+        try {
+            $ipv4Addresses = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+                Where-Object {
+                    $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+                    -not $_.IPAddressToString.StartsWith("127.") -and
+                    -not $_.IPAddressToString.StartsWith("169.254.")
+                } |
+                Select-Object -ExpandProperty IPAddressToString -Unique
+
+            foreach ($address in $ipv4Addresses) {
+                $urls.Add("${Scheme}://${address}:$Port")
+            }
+        } catch {
+            # DNS enumeration can fail on some local setups. We still return localhost.
+        }
+    } else {
+        $browserHost = if ($BindHost -eq "127.0.0.1") { "localhost" } else { $BindHost }
+        $urls.Add("${Scheme}://${browserHost}:$Port")
+    }
+
+    return $urls
+}
+
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = (Resolve-Path $projectRoot).Path
 $venvRoot = Join-Path $projectRoot $VenvPath
@@ -157,7 +192,21 @@ if (-not (Test-PortAvailable -HostName $BindHost -PortNumber $Port)) {
     throw "Port $Port is already in use on $BindHost. Start with a different port, for example: .\run.ps1 -Port 8001"
 }
 
-Write-Host "Starting Crowd Management System ($modeLabel, $reloadLabel) at ${scheme}://${BindHost}:$Port" -ForegroundColor Green
+Write-Host "Starting Crowd Management System ($modeLabel, $reloadLabel)" -ForegroundColor Green
+Write-Host "Server bind address: ${scheme}://${BindHost}:$Port" -ForegroundColor DarkGray
+
+$browserUrls = Get-BrowserUrls -Scheme $scheme -BindHost $BindHost -Port $Port
+if ($browserUrls.Count -gt 0) {
+    Write-Host "Open in your browser:" -ForegroundColor Green
+    foreach ($url in $browserUrls) {
+        Write-Host "  $url" -ForegroundColor Green
+    }
+}
+
+if ($BindHost -eq "0.0.0.0") {
+    Write-Host "Use one of the browser URLs above. 0.0.0.0 is only for binding the server, not for opening in a browser." -ForegroundColor Yellow
+}
+
 if (-not $UseHttps) {
     Write-Host "Mobile phone camera sharing will not work over plain HTTP unless the phone opens localhost on the same device." -ForegroundColor Yellow
     Write-Host "For the mobile portal, use: .\run.ps1 -UseHttps -BindHost 0.0.0.0" -ForegroundColor Yellow

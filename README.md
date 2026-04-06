@@ -169,6 +169,8 @@ Useful variants:
 .\run.ps1 -SkipInstall
 ```
 
+When you bind to `0.0.0.0`, do not open `http://0.0.0.0:8000` or `https://0.0.0.0:8000` in the browser. Use `http://localhost:8000` / `https://localhost:8000` on the same machine, or `https://<your-laptop-ip>:8000` from another device on the LAN.
+
 `start_https.ps1` now uses the same launcher internally:
 
 ```powershell

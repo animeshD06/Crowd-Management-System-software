@@ -20,5 +20,9 @@ $env:CMS_RELOAD = "false"
 $env:CMS_SSL_CERTFILE = $certFile
 $env:CMS_SSL_KEYFILE = $keyFile
 
-Write-Host "Starting Crowd Management System with HTTPS on https://0.0.0.0:8000" -ForegroundColor Green
+Write-Host "Starting Crowd Management System with HTTPS" -ForegroundColor Green
+Write-Host "Server bind address: https://0.0.0.0:8000" -ForegroundColor DarkGray
+Write-Host "Open in your browser: https://localhost:8000" -ForegroundColor Green
+Write-Host "For another device on your Wi-Fi, use: https://<your-laptop-ip>:8000" -ForegroundColor Green
+Write-Host "0.0.0.0 is only for binding the server, not for opening in a browser." -ForegroundColor Yellow
 python app.py
